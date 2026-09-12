@@ -1,0 +1,530 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Public Sans', system-ui, sans-serif; }
+  button { font-family: inherit; }
+
+  :root {
+    --bg: oklch(9% 0.004 260);
+    --surface: oklch(15% 0.006 260);
+    --border: oklch(24% 0.008 260);
+    --text: oklch(97% 0.002 260);
+    --text-secondary: oklch(70% 0.006 260);
+    --text-tertiary: oklch(55% 0.006 260);
+    --chip-bg: oklch(20% 0.008 260);
+    --chip-text: oklch(92% 0.004 260);
+    --btn-bg: oklch(97% 0.002 260);
+    --btn-fg: oklch(9% 0.004 260);
+
+    --supported-bg: oklch(30% 0.09 150);
+    --supported-fg: oklch(88% 0.14 150);
+    --mixed-bg: oklch(30% 0.09 80);
+    --mixed-fg: oklch(88% 0.14 80);
+    --unsupported-bg: oklch(30% 0.1 25);
+    --unsupported-fg: oklch(88% 0.15 25);
+    --unable-bg: oklch(26% 0.006 260);
+    --unable-fg: oklch(85% 0.006 260);
+  }
+
+  .phone {
+    width: 390px; height: 844px;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* header (upload / my posts only) */
+  .app-header {
+    flex: none;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .app-header .eyebrow {
+    font: 600 11px/1 'Public Sans', sans-serif;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .app-header .title {
+    font: 600 24px/1.2 'Source Serif 4', serif;
+  }
+
+  .app-content { flex: 1; min-height: 0; }
+  .panel-padding { height: 100%; overflow-y: auto; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 22px; }
+
+  /* ---- feed: full-bleed, snap-scroll ---- */
+  .feed-scroll {
+    height: 100%; overflow-y: auto;
+    scroll-snap-type: y mandatory;
+  }
+  .feed-slide {
+    position: relative;
+    height: 100%; width: 100%;
+    scroll-snap-align: start;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slide-quote {
+    position: relative; z-index: 1;
+    font: 600 24px/1.45 'Source Serif 4', serif;
+    color: oklch(98% 0.002 260 / 0.96);
+    text-align: center;
+    padding: 0 34px;
+    text-wrap: pretty;
+  }
+  .slide-scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.38) 32%, rgba(0,0,0,0.06) 55%, transparent 68%);
+  }
+
+  .top-controls {
+    position: absolute; top: 14px; left: 14px; right: 14px; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pill-group { display: flex; align-items: center; gap: 8px; }
+  .icon-pill {
+    width: 38px; height: 38px; border-radius: 999px; border: none;
+    background: rgba(0,0,0,0.4); color: oklch(98% 0.002 260);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px);
+  }
+  .icon-pill.wide { width: auto; padding: 0 12px; gap: 6px; }
+
+  .side-rail {
+    position: absolute; right: 12px; bottom: 148px; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .rail-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    border: none; background: transparent; color: oklch(98% 0.002 260);
+    cursor: pointer;
+  }
+  .rail-btn .circle {
+    width: 44px; height: 44px; border-radius: 999px;
+    background: rgba(0,0,0,0.38);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px);
+  }
+  .rail-btn .count { font: 600 11.5px/1 'Public Sans', sans-serif; }
+
+  .bottom-info {
+    position: absolute; left: 16px; right: 78px; bottom: 20px; z-index: 2;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .creator-row { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 12px/1 'Public Sans', sans-serif; color: oklch(15% 0.006 260);
+    flex: none;
+  }
+  .handle { font: 600 14px/1 'Public Sans', sans-serif; color: oklch(98% 0.002 260); }
+  .subscribe-btn {
+    margin-left: 4px; border: none; border-radius: 999px;
+    background: var(--btn-bg); color: var(--btn-fg);
+    font: 700 12px/1 'Public Sans', sans-serif;
+    padding: 7px 13px; cursor: pointer;
+  }
+  .topic-chip {
+    align-self: flex-start;
+    font: 600 10.5px/1 'Public Sans', sans-serif;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    background: rgba(255,255,255,0.16); color: oklch(98% 0.002 260);
+    padding: 5px 10px; border-radius: 999px;
+  }
+  .caption {
+    font: 400 14px/1.4 'Public Sans', sans-serif;
+    color: oklch(96% 0.002 260 / 0.95);
+  }
+  .verdict-row { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 11px 6px 9px; border-radius: 999px;
+    font: 700 12.5px/1 'Public Sans', sans-serif;
+  }
+  .badge.supported { background: var(--supported-bg); color: var(--supported-fg); }
+  .badge.mixed { background: var(--mixed-bg); color: var(--mixed-fg); }
+  .badge.unsupported { background: var(--unsupported-bg); color: var(--unsupported-fg); }
+  .badge.unable { background: var(--unable-bg); color: var(--unable-fg); }
+  .verdict-explanation {
+    font: 400 12.5px/1.4 'Public Sans', sans-serif;
+    color: oklch(88% 0.004 260 / 0.9);
+  }
+
+  /* ---- upload ---- */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font: 500 13px/1.2 'Public Sans', sans-serif; color: var(--text-secondary); display: flex; justify-content: space-between; }
+  .field-label .req { color: var(--unsupported-fg); font-weight: 600; }
+  .field-input, textarea.field-input {
+    width: 100%; padding: 13px 14px;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+    font: 400 15px/1.4 'Public Sans', sans-serif;
+    resize: none;
+  }
+  .field-input:focus { outline: 2px solid oklch(72% 0.1 262); outline-offset: 1px; }
+  .field-hint { font: 400 12.5px/1.4 'Public Sans', sans-serif; color: var(--text-tertiary); }
+  .segmented {
+    display: flex; background: var(--chip-bg);
+    border-radius: 999px; padding: 4px; gap: 4px;
+  }
+  .segmented button {
+    flex: 1; border: none; background: transparent;
+    padding: 11px 0; border-radius: 999px;
+    font: 600 14px/1 'Public Sans', sans-serif;
+    color: var(--text-secondary); cursor: pointer;
+    min-height: 44px;
+  }
+  .segmented button.active { background: var(--surface); color: var(--text); }
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: 12px;
+    padding: 28px 16px; display: flex; flex-direction: column;
+    align-items: center; gap: 8px; color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .dropzone .dz-title { font: 600 14px/1 'Public Sans', sans-serif; color: var(--text); }
+  .dropzone .dz-sub { font: 400 12.5px/1 'Public Sans', sans-serif; }
+  .btn-primary {
+    width: 100%; padding: 14px; margin-top: 4px;
+    border-radius: 10px; border: none;
+    background: var(--btn-bg); color: var(--btn-fg);
+    font: 600 15px/1 'Public Sans', sans-serif; cursor: pointer;
+    min-height: 48px;
+  }
+
+  /* ---- my posts ---- */
+  .mypost { display: flex; flex-direction: column; gap: 8px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .mypost:last-child { border-bottom: none; }
+  .mypost-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .mypost-preview { font: 500 14.5px/1.4 'Public Sans', sans-serif; color: var(--text); }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    padding: 5px 10px; border-radius: 999px;
+    font: 600 12px/1 'Public Sans', sans-serif;
+  }
+  .status-badge.processing { background: var(--chip-bg); color: var(--chip-text); }
+  .status-badge.published { background: var(--supported-bg); color: var(--supported-fg); }
+  .status-badge.rejected { background: var(--unsupported-bg); color: var(--unsupported-fg); }
+  .status-sub { font: 400 13px/1.45 'Public Sans', sans-serif; color: var(--text-secondary); }
+  .mypost-time { font: 500 12px/1 'Public Sans', sans-serif; color: var(--text-tertiary); }
+  .spin {
+    width: 10px; height: 10px; border-radius: 999px;
+    border: 1.6px solid var(--chip-text); border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- tab bar ---- */
+  .tab-bar {
+    flex: none; display: flex; border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .tab-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    border: none; background: transparent; cursor: pointer;
+    padding: 10px 0 12px; min-height: 56px;
+    color: var(--text-tertiary);
+  }
+  .tab-btn.active { color: var(--text); }
+  .tab-btn .label { font: 600 11px/1 'Public Sans', sans-serif; }
+</style>
+</helmet>
+
+<div class="phone" style="--accent:{{accent}}">
+
+  <sc-if value="{{showHeader}}" hint-placeholder-val="{{false}}">
+    <div class="app-header">
+      <div class="eyebrow">TrustFeed</div>
+      <div class="title">{{headerTitle}}</div>
+    </div>
+  </sc-if>
+
+  <div class="app-content">
+
+    <sc-if value="{{isFeed}}" hint-placeholder-val="{{true}}">
+      <div class="feed-scroll">
+        <sc-for list="{{feedPosts}}" as="item" hint-placeholder-count="4">
+          <div class="feed-slide" style="{{item.bgStyle}}">
+            <sc-if value="{{item.isText}}" hint-placeholder-val="{{false}}">
+              <div class="slide-quote">&ldquo;{{item.content}}&rdquo;</div>
+            </sc-if>
+            <div class="slide-scrim"></div>
+
+            <div class="top-controls">
+              <div class="pill-group">
+                <button class="icon-pill">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                </button>
+                <button class="icon-pill">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4z"/></svg>
+                </button>
+              </div>
+              <button class="icon-pill wide">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
+              </button>
+            </div>
+
+            <div class="side-rail">
+              <button class="rail-btn">
+                <span class="circle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-9.5-8.7C.8 8 2 4.5 5.2 4c2-.3 3.8.7 4.8 2.3C11 4.7 12.8 3.7 14.8 4c3.2.5 4.4 4 3.7 7.3C16 15.6 12 20 12 20z"/></svg></span>
+                <span class="count">{{item.likes}}</span>
+              </button>
+              <button class="rail-btn">
+                <span class="circle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-8.9 8.4 9 9 0 01-3.6-.7L3 20l1-4.7A8.3 8.3 0 013.5 11 8.4 8.4 0 0112 3.1a8.5 8.5 0 019 8.4z"/></svg></span>
+                <span class="count">{{item.comments}}</span>
+              </button>
+              <button class="rail-btn">
+                <span class="circle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg></span>
+                <span class="count">Share</span>
+              </button>
+              <button class="rail-btn">
+                <span class="circle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-3z"/><path d="M9.3 12l1.8 1.8L15 10"/></svg></span>
+                <span class="count">Sources</span>
+              </button>
+            </div>
+
+            <div class="bottom-info">
+              <div class="creator-row">
+                <span class="avatar" style="{{item.avatarStyle}}">{{item.initial}}</span>
+                <span class="handle">{{item.uploader}}</span>
+                <button class="subscribe-btn">Subscribe</button>
+              </div>
+              <span class="topic-chip">{{item.topic}}</span>
+              <sc-if value="{{item.isVideo}}" hint-placeholder-val="{{false}}">
+                <div class="caption">{{item.content}}</div>
+              </sc-if>
+              <div class="verdict-row">
+                <sc-if value="{{item.isSupported}}" hint-placeholder-val="{{false}}">
+                  <span class="badge supported">
+                    <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l3.5 3.5L16 6"/></svg>
+                    Well Supported
+                  </span>
+                </sc-if>
+                <sc-if value="{{item.isMixed}}" hint-placeholder-val="{{false}}">
+                  <span class="badge mixed">
+                    <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10c1.5-3 3.5-3 5 0s3.5 3 5 0 3.5-3 5 0"/></svg>
+                    Mixed Evidence
+                  </span>
+                </sc-if>
+                <sc-if value="{{item.isUnsupported}}" hint-placeholder-val="{{false}}">
+                  <span class="badge unsupported">
+                    <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+                    Unsupported
+                  </span>
+                </sc-if>
+                <sc-if value="{{item.isUnable}}" hint-placeholder-val="{{false}}">
+                  <span class="badge unable">
+                    <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 7.5a2.5 2.5 0 114 2c-.8.8-1.5 1.2-1.5 2.5"/><circle cx="10" cy="15" r="0.5" fill="currentColor" stroke="none"/></svg>
+                    Unable to Verify
+                  </span>
+                </sc-if>
+                <div class="verdict-explanation">{{item.explanation}}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isUpload}}" hint-placeholder-val="{{false}}">
+      <div class="panel-padding">
+      <div class="segmented">
+        <button class="{{textBtnClass}}" onClick="{{setText}}">Text</button>
+        <button class="{{videoBtnClass}}" onClick="{{setVideo}}">Video</button>
+      </div>
+
+      <sc-if value="{{isTextType}}" hint-placeholder-val="{{true}}">
+        <div class="field">
+          <label class="field-label">What are you sharing?</label>
+          <textarea class="field-input" rows="6" placeholder="Write the claim or post you want checked..."></textarea>
+        </div>
+      </sc-if>
+      <sc-if value="{{isVideoType}}" hint-placeholder-val="{{false}}">
+        <div class="field">
+          <label class="field-label">Video</label>
+          <div class="dropzone">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3"/></svg>
+            <div class="dz-title">Tap to choose a video</div>
+            <div class="dz-sub">MP4, up to 2 minutes</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div class="field">
+        <label class="field-label">Topic <span class="req">Required</span></label>
+        <input class="field-input" type="text" placeholder="e.g. space, nutrition, history" />
+        <div class="field-hint">This is what your post gets checked against before it's shown to anyone.</div>
+      </div>
+
+      <button class="btn-primary">Submit for review</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isMyPosts}}" hint-placeholder-val="{{false}}">
+      <div class="panel-padding">
+      <sc-for list="{{myPosts}}" as="item" hint-placeholder-count="3">
+        <div class="mypost">
+          <div class="mypost-top">
+            <span class="mypost-preview">{{item.preview}}</span>
+            <sc-if value="{{item.isProcessing}}" hint-placeholder-val="{{false}}">
+              <span class="status-badge processing"><span class="spin"></span>Processing</span>
+            </sc-if>
+            <sc-if value="{{item.isPublished}}" hint-placeholder-val="{{false}}">
+              <span class="status-badge published">Published</span>
+            </sc-if>
+            <sc-if value="{{item.isRejected}}" hint-placeholder-val="{{false}}">
+              <span class="status-badge rejected">Rejected</span>
+            </sc-if>
+          </div>
+          <sc-if value="{{item.isProcessing}}" hint-placeholder-val="{{false}}">
+            <div class="status-sub">Checking relevance and sources...</div>
+          </sc-if>
+          <sc-if value="{{item.isRejected}}" hint-placeholder-val="{{false}}">
+            <div class="status-sub">{{item.reason}}</div>
+          </sc-if>
+          <div class="mypost-time">{{item.timeAgo}}</div>
+        </div>
+      </sc-for>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn {{feedTabClass}}" onClick="{{goFeed}}">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="17" x2="12" y2="17"/></svg>
+      <span class="label">Feed</span>
+    </button>
+    <button class="tab-btn {{uploadTabClass}}" onClick="{{goUpload}}">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span class="label">Upload</span>
+    </button>
+    <button class="tab-btn {{myPostsTabClass}}" onClick="{{goMyPosts}}">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>
+      <span class="label">My Posts</span>
+    </button>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"oklch(72% 0.1 262)"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'feed', postType: 'text' };
+  }
+  renderVals() {
+    const tab = this.state.tab;
+    const postType = this.state.postType;
+
+    const headerTitles = { feed: 'Feed', upload: 'New post', myposts: 'My Posts' };
+
+    const feedPosts = [
+      {
+        topic: 'Space', isVideo: true, isText: false,
+        bgStyle: 'background: linear-gradient(160deg, oklch(48% 0.08 250), oklch(22% 0.06 265));',
+        content: "This orbital station has been continuously crewed for over twenty years straight.",
+        isSupported: true, isMixed: false, isUnsupported: false, isUnable: false,
+        explanation: "NASA's own mission tracking data confirms this claim.",
+        uploader: '@orbitalodyssey', initial: 'O', avatarStyle: 'background: oklch(75% 0.11 250);',
+        likes: '60K', comments: '460',
+      },
+      {
+        topic: 'Nutrition', isVideo: false, isText: true,
+        content: 'Coffee may lower the risk of some diseases, though the evidence is still preliminary.',
+        bgStyle: 'background: linear-gradient(160deg, oklch(42% 0.07 55), oklch(20% 0.05 40));',
+        isSupported: false, isMixed: true, isUnsupported: false, isUnable: false,
+        explanation: 'Some studies show a correlation, but researchers stop short of a causal claim.',
+        uploader: '@healthdigest', initial: 'H', avatarStyle: 'background: oklch(78% 0.11 75);',
+        likes: '12K', comments: '203',
+      },
+      {
+        topic: 'History', isVideo: true, isText: false,
+        bgStyle: 'background: linear-gradient(160deg, oklch(46% 0.06 90), oklch(21% 0.05 70));',
+        content: 'A single stonemason is said to have carved this entire facade alone.',
+        isSupported: false, isMixed: false, isUnsupported: false, isUnable: true,
+        explanation: 'No independent sources could be found to confirm this specific detail.',
+        uploader: '@pastperfect', initial: 'P', avatarStyle: 'background: oklch(76% 0.1 85);',
+        likes: '8.2K', comments: '95',
+      },
+      {
+        topic: 'Space', isVideo: false, isText: true,
+        content: 'The Great Wall of China is visible from space with the naked eye.',
+        bgStyle: 'background: linear-gradient(160deg, oklch(45% 0.09 25), oklch(20% 0.06 15));',
+        isSupported: false, isMixed: false, isUnsupported: true, isUnable: false,
+        explanation: 'Multiple astronauts and space agencies have refuted this claim directly.',
+        uploader: '@spacefacts', initial: 'S', avatarStyle: 'background: oklch(77% 0.13 25);',
+        likes: '31K', comments: '812',
+      },
+      {
+        topic: 'Wildlife', isVideo: true, isText: false,
+        bgStyle: 'background: linear-gradient(160deg, oklch(46% 0.09 150), oklch(20% 0.06 160));',
+        content: "This species of octopus can change its skin texture in under a second.",
+        isSupported: true, isMixed: false, isUnsupported: false, isUnable: false,
+        explanation: 'Corroborated by peer-reviewed marine biology research.',
+        uploader: '@naturenow', initial: 'N', avatarStyle: 'background: oklch(75% 0.12 150);',
+        likes: '94K', comments: '1.1K',
+      },
+    ];
+
+    const myPosts = [
+      {
+        preview: 'Space · video post',
+        isProcessing: true, isPublished: false, isRejected: false,
+        timeAgo: 'Uploaded 3 minutes ago',
+      },
+      {
+        preview: 'History · "The printing press took over 50 years to spread..."',
+        isProcessing: false, isPublished: true, isRejected: false,
+        timeAgo: 'Published 2 days ago',
+      },
+      {
+        preview: 'Space · video post',
+        isProcessing: false, isPublished: false, isRejected: true,
+        reason: "Rejected — doesn't match the topic ‘space’ closely enough.",
+        timeAgo: 'Rejected 4 days ago',
+      },
+      {
+        preview: 'Nutrition · "This one supplement cures inflammation..."',
+        isProcessing: false, isPublished: false, isRejected: true,
+        reason: 'Rejected — one claim wasn’t supported by evidence.',
+        timeAgo: 'Rejected 6 days ago',
+      },
+    ];
+
+    return {
+      accent: this.props.accent ?? 'oklch(72% 0.1 262)',
+      headerTitle: headerTitles[tab],
+      showHeader: tab !== 'feed',
+      isFeed: tab === 'feed', isUpload: tab === 'upload', isMyPosts: tab === 'myposts',
+      feedTabClass: tab === 'feed' ? 'active' : '',
+      uploadTabClass: tab === 'upload' ? 'active' : '',
+      myPostsTabClass: tab === 'myposts' ? 'active' : '',
+      goFeed: () => this.setState({ tab: 'feed' }),
+      goUpload: () => this.setState({ tab: 'upload' }),
+      goMyPosts: () => this.setState({ tab: 'myposts' }),
+      isTextType: postType === 'text', isVideoType: postType === 'video',
+      textBtnClass: postType === 'text' ? 'active' : '',
+      videoBtnClass: postType === 'video' ? 'active' : '',
+      setText: () => this.setState({ postType: 'text' }),
+      setVideo: () => this.setState({ postType: 'video' }),
+      feedPosts, myPosts,
+    };
+  }
+}
+</script>
+</body>
+</html>

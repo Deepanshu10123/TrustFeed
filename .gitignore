@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local session config -- settings.local.json has been found
+# to contain leaked secrets from permission-approval log entries; never
+# commit this directory regardless.
+.claude/
+
+# Test video clips (not source code, can be large)
+backend/tests/fixtures/*
+!backend/tests/fixtures/.gitkeep
+
+# Temporary local job results (Milestone 3 stand-in until Postgres in Milestone 4)
+backend/data/

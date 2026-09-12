@@ -1,0 +1,10 @@
+{
+  "artboards": [
+    { "file": "Auth.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "Main.dc.html", "x": 500, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "direction-note", "x": 0, "y": -90, "w": 500, "text": "TrustFeed — editorial, calm credibility feed. Not an engagement-bait design: hairline dividers instead of heavy cards, no autoplay, muted semantic colors for verdicts." }
+  ],
+  "launch": { "view": "canvas" }
+}

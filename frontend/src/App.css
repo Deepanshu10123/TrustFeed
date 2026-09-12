@@ -1,0 +1,42 @@
+#root { display: flex; justify-content: center; }
+.phone-frame {
+  width: 100%; max-width: 480px; height: 100vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.app-header {
+  flex: none;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.app-header .header-text { display: flex; flex-direction: column; gap: 2px; }
+.app-header .eyebrow {
+  font: 600 11px/1 'Public Sans', sans-serif;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.app-header .title { font: 600 24px/1.2 'Source Serif 4', serif; }
+.sign-out-btn {
+  border: none; background: transparent; color: var(--text-tertiary);
+  font: 600 12.5px/1 'Public Sans', sans-serif; cursor: pointer;
+  padding: 8px;
+}
+.app-content { flex: 1; min-height: 0; }
+.tab-bar {
+  flex: none; display: flex; border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: none; background: transparent; cursor: pointer;
+  padding: 10px 0 12px; min-height: 56px;
+  color: var(--text-tertiary);
+}
+.tab-btn.active { color: var(--text); }
+.tab-btn .label { font: 600 11px/1 'Public Sans', sans-serif; }
+.loading-screen {
+  height: 100vh; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); font: 400 14px 'Public Sans', sans-serif;
+}

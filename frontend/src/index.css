@@ -1,0 +1,35 @@
+/* Design tokens carried over directly from the approved mockup --
+   see design/trustfeed-mockup/. Dark theme only, by design choice. */
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: 'Public Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+button { font-family: inherit; }
+a { color: var(--text-secondary); }
+
+:root {
+  --bg: oklch(9% 0.004 260);
+  --surface: oklch(15% 0.006 260);
+  --border: oklch(24% 0.008 260);
+  --text: oklch(97% 0.002 260);
+  --text-secondary: oklch(70% 0.006 260);
+  --text-tertiary: oklch(55% 0.006 260);
+  --accent: oklch(72% 0.1 262);
+  --chip-bg: oklch(20% 0.008 260);
+  --chip-text: oklch(92% 0.004 260);
+  --btn-bg: oklch(97% 0.002 260);
+  --btn-fg: oklch(9% 0.004 260);
+
+  --supported-bg: oklch(30% 0.09 150);
+  --supported-fg: oklch(88% 0.14 150);
+  --mixed-bg: oklch(30% 0.09 80);
+  --mixed-fg: oklch(88% 0.14 80);
+  --unsupported-bg: oklch(30% 0.1 25);
+  --unsupported-fg: oklch(88% 0.15 25);
+  --unable-bg: oklch(26% 0.006 260);
+  --unable-fg: oklch(85% 0.006 260);
+}
