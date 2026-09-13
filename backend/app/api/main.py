@@ -73,7 +73,13 @@ async def create_post(
     if kind == "video":
         if video is None:
             raise HTTPException(status_code=400, detail="video file required when kind='video'")
-        storage_path = f"{user.id}/{post_id}/{video.filename}"
+        # Only the extension survives from the original filename -- a
+        # real upload's name can carry spaces, unicode, or emoji (seen in
+        # practice: a downloaded clip named with one), and some of that is
+        # risky as a raw Storage object path. The post id is already a
+        # unique, safe name on its own.
+        ext = os.path.splitext(video.filename or "")[1] or ".mp4"
+        storage_path = f"{user.id}/{post_id}{ext}"
         # Without an explicit content-type, Supabase Storage serves the
         # file as text/plain, which browsers refuse to play as video.
         content_type = video.content_type or "video/mp4"
@@ -97,6 +103,7 @@ async def create_post(
                     raise HTTPException(
                         status_code=413, detail="That video is too large to upload. Try a shorter clip."
                     ) from e
+                print(f"[upload] video storage error: status={e.status} code={e.code} message={e.message}", flush=True)
                 raise HTTPException(status_code=502, detail="Video upload failed, please try again.") from e
         finally:
             os.unlink(tmp_path)

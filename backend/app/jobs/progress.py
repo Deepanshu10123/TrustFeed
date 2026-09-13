@@ -24,7 +24,11 @@ _sync_client: redis.Redis | None = None
 def _get_sync_client() -> redis.Redis:
     global _sync_client
     if _sync_client is None:
-        _sync_client = redis.from_url(get_redis_url(), decode_responses=True)
+        # Same fix as queue.py and search_tool.py's Redis clients: without
+        # socket_timeout, a stale connection hangs this call forever
+        # instead of raising, which the try/except in publish_progress()
+        # can't catch -- a hang here would stall the worker's main loop.
+        _sync_client = redis.from_url(get_redis_url(), decode_responses=True, socket_timeout=5)
     return _sync_client
 
 

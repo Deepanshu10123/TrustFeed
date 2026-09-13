@@ -40,7 +40,14 @@ def _get_client() -> TavilyClient:
 def _get_redis() -> redis.Redis:
     global _redis
     if _redis is None:
-        _redis = redis.from_url(get_redis_url(), decode_responses=True)
+        # Without socket_timeout, a stale/dropped cloud Redis connection
+        # (a real, observed failure mode -- see Milestone 3's queue.py fix
+        # for the same class of bug) hangs this call forever instead of
+        # raising, which the try/except around every call site can't catch
+        # -- and since this runs inside the Critic's research loop, a
+        # single hang here freezes that claim (and every job behind it,
+        # since one worker processes jobs one at a time) indefinitely.
+        _redis = redis.from_url(get_redis_url(), decode_responses=True, socket_timeout=5)
     return _redis
 
 
