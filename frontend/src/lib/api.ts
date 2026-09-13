@@ -4,7 +4,7 @@
  * own tokens, it only ever verifies the one Supabase already gave us.
  */
 import { supabase } from './supabase'
-import type { Post } from './types'
+import type { Comment, Post } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string
 
@@ -73,6 +73,22 @@ export async function uploadAvatar(file: File): Promise<{ avatar_url: string }> 
 
 export async function getFeed(): Promise<Post[]> {
   return request('/feed')
+}
+
+export async function getComments(postId: string): Promise<Comment[]> {
+  return request(`/posts/${postId}/comments`)
+}
+
+export async function addComment(postId: string, text: string): Promise<Comment> {
+  return request(`/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+}
+
+export async function deleteComment(commentId: string): Promise<{ deleted: string }> {
+  return request(`/comments/${commentId}`, { method: 'DELETE' })
 }
 
 export async function getInterests(): Promise<{ topics: string[] }> {

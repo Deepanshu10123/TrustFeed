@@ -29,6 +29,14 @@ export interface Report {
   error?: string
 }
 
+export interface Comment {
+  id: string
+  post_id: string
+  user_id: string
+  text: string
+  created_at: string
+}
+
 export interface Post {
   id: string
   user_id: string

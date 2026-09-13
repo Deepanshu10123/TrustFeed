@@ -28,3 +28,14 @@ create table user_preferences (
 -- check "Public bucket"), same manual step as the "videos" bucket at
 -- Milestone 4a.
 alter table user_preferences add column avatar_url text;
+
+-- Comments on a post. No moderation/filtering at this layer -- same
+-- documented gap as post content itself (see ADR 0002's Consequences):
+-- a real launch would need a moderation policy here too.
+create table comments (
+  id uuid primary key,
+  post_id uuid not null references posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  text text not null,
+  created_at timestamptz not null default now()
+);

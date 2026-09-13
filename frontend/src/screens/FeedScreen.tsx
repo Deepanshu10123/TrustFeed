@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { getFeed } from '../lib/api'
-import type { Post } from '../lib/types'
-import { captionFor, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
+import { addComment, deleteComment, getComments, getFeed } from '../lib/api'
+import { useAuth } from '../hooks/useAuth'
+import type { Comment, Post } from '../lib/types'
+import { captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import './FeedScreen.css'
 
 const BADGE_CLASS: Record<string, string> = {
@@ -57,13 +58,117 @@ function VideoBackground({ src, muted }: { src: string; muted: boolean }) {
   )
 }
 
+/** A comment thread for one post, opened over the whole feed as a bottom
+ * sheet. No moderation beyond sign-in and "delete your own, or delete
+ * anything on your own post" -- a real launch would need more than that,
+ * same honest gap as post content itself (ADR 0002). */
+function CommentsSheet({
+  post,
+  currentUserId,
+  onClose,
+}: {
+  post: Post
+  currentUserId: string | undefined
+  onClose: () => void
+}) {
+  const [comments, setComments] = useState<Comment[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [posting, setPosting] = useState(false)
+
+  function load() {
+    getComments(post.id)
+      .then(setComments)
+      .catch((e) => setError(e.message))
+  }
+
+  useEffect(load, [post.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSubmit() {
+    const value = text.trim()
+    if (!value) return
+    setPosting(true)
+    try {
+      await addComment(post.id, value)
+      setText('')
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  async function handleDelete(commentId: string) {
+    try {
+      await deleteComment(commentId)
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const canModerateAll = currentUserId === post.user_id
+
+  return (
+    <div className="comments-overlay" onClick={onClose}>
+      <div className="comments-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="comments-header">
+          <span>Comments</span>
+          <button className="comments-close" onClick={onClose} type="button" aria-label="Close">
+            &times;
+          </button>
+        </div>
+        <div className="comments-list">
+          {error && <div className="comment-empty">{error}</div>}
+          {comments === null && !error && <div className="comment-empty">Loading...</div>}
+          {comments?.length === 0 && <div className="comment-empty">No comments yet -- say something.</div>}
+          {comments?.map((c) => (
+            <div className="comment-row" key={c.id}>
+              <span className="comment-avatar">U</span>
+              <div className="comment-body">
+                <div className="comment-meta">
+                  <span className="comment-handle">{handleForUser(c.user_id)}</span>
+                  <span className="comment-time">{timeAgo(c.created_at)}</span>
+                </div>
+                <div className="comment-text">{c.text}</div>
+              </div>
+              {(c.user_id === currentUserId || canModerateAll) && (
+                <button className="comment-delete" onClick={() => handleDelete(c.id)} type="button">
+                  Delete
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="comment-form">
+          <input
+            className="comment-input"
+            placeholder="Add a comment..."
+            value={text}
+            maxLength={500}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          />
+          <button className="comment-send" onClick={handleSubmit} disabled={posting || !text.trim()} type="button">
+            Post
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function FeedScreen() {
+  const { session } = useAuth()
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Shared across all slides -- only one video plays at a time, and a
   // sound preference that persists as you swipe matches how every
   // short-form feed already behaves.
   const [muted, setMuted] = useState(true)
+  const [commentsPost, setCommentsPost] = useState<Post | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
     getFeed()
@@ -71,11 +176,41 @@ export function FeedScreen() {
       .catch((e) => setError(e.message))
   }, [])
 
+  function showToast(message: string) {
+    setToast(message)
+    setTimeout(() => setToast(null), 2200)
+  }
+
+  // No per-post URLs exist yet (this app has no router -- see Milestone
+  // 5's honest gap), so this shares a caption plus the app's general
+  // link, not a deep link straight to this exact post.
+  async function handleShare(post: Post) {
+    const caption = post.kind === 'text' ? post.content : captionFor(post)
+    const text = `${post.declared_topic}: "${caption.length > 100 ? `${caption.slice(0, 100)}...` : caption}" -- checked on TrustFeed`
+    const url = window.location.origin
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'TrustFeed', text, url })
+      } catch {
+        // the user closed the share sheet without picking anything -- not an error
+      }
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`)
+      showToast('Link copied to clipboard')
+    } catch {
+      showToast("Couldn't copy the link")
+    }
+  }
+
   if (error) return <div className="feed-status">Couldn't load the feed: {error}</div>
   if (posts === null) return <div className="feed-status">Loading the feed...</div>
   if (posts.length === 0) return <div className="feed-status">No published posts yet. Be the first to upload one.</div>
 
   return (
+    <>
     <div className="feed-scroll">
       {posts.map((post) => {
         const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])
@@ -110,12 +245,12 @@ export function FeedScreen() {
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.4-9.5-8.7C.8 8 2 4.5 5.2 4c2-.3 3.8.7 4.8 2.3C11 4.7 12.8 3.7 14.8 4c3.2.5 4.4 4 3.7 7.3C16 15.6 12 20 12 20z" /></svg>
                 </span>
               </button>
-              <button className="rail-btn" type="button">
+              <button className="rail-btn" type="button" onClick={() => setCommentsPost(post)}>
                 <span className="circle">
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 01-8.9 8.4 9 9 0 01-3.6-.7L3 20l1-4.7A8.3 8.3 0 013.5 11 8.4 8.4 0 0112 3.1a8.5 8.5 0 019 8.4z" /></svg>
                 </span>
               </button>
-              <button className="rail-btn" type="button">
+              <button className="rail-btn" type="button" onClick={() => handleShare(post)}>
                 <span className="circle">
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v14" /></svg>
                 </span>
@@ -142,5 +277,10 @@ export function FeedScreen() {
         )
       })}
     </div>
+    {commentsPost && (
+      <CommentsSheet post={commentsPost} currentUserId={session?.user.id} onClose={() => setCommentsPost(null)} />
+    )}
+    {toast && <div className="feed-toast">{toast}</div>}
+    </>
   )
 }

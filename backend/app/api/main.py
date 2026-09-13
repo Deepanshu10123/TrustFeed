@@ -206,6 +206,10 @@ class InterestsBody(BaseModel):
     topics: list[str]
 
 
+class CommentBody(BaseModel):
+    text: str
+
+
 @app.get("/interests")
 async def get_interests(user=Depends(get_current_user)):
     result = get_supabase_client().table("user_preferences").select("topics").eq("user_id", user.id).execute()
@@ -278,3 +282,50 @@ async def get_feed(user=Depends(get_current_user)):
     result = query.order("created_at", desc=True).limit(50).execute()
 
     return _attach_video_urls(result.data)
+
+
+@app.get("/posts/{post_id}/comments")
+async def list_comments(post_id: str, user=Depends(get_current_user)):
+    result = (
+        get_supabase_client()
+        .table("comments")
+        .select("*")
+        .eq("post_id", post_id)
+        .order("created_at")
+        .execute()
+    )
+    return result.data
+
+
+@app.post("/posts/{post_id}/comments")
+async def add_comment(post_id: str, body: CommentBody, user=Depends(get_current_user)):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment text is required")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="Comments are limited to 500 characters")
+
+    comment = {
+        "id": str(uuid.uuid4()),
+        "post_id": post_id,
+        "user_id": user.id,
+        "text": text,
+    }
+    get_supabase_client().table("comments").insert(comment).execute()
+    return comment
+
+
+@app.delete("/comments/{comment_id}")
+async def delete_comment(comment_id: str, user=Depends(get_current_user)):
+    """A comment can be removed by whoever wrote it, or by the owner of
+    the post it's on -- same as most real comment sections."""
+    supabase = get_supabase_client()
+    result = supabase.table("comments").select("*, posts!inner(user_id)").eq("id", comment_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    comment = result.data[0]
+    if comment["user_id"] != user.id and comment["posts"]["user_id"] != user.id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    supabase.table("comments").delete().eq("id", comment_id).execute()
+    return {"deleted": comment_id}

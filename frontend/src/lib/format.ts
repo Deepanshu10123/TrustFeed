@@ -21,8 +21,12 @@ export function summarizeVerdict(verdicts: Verdict[]): Verdict | null {
   return [...verdicts].sort((a, b) => rank[a.label] - rank[b.label])[0]
 }
 
+export function handleForUser(userId: string): string {
+  return `@user-${userId.slice(0, 6)}`
+}
+
 export function uploaderHandle(post: Post): string {
-  return `@user-${post.user_id.slice(0, 6)}`
+  return handleForUser(post.user_id)
 }
 
 export function captionFor(post: Post): string {
