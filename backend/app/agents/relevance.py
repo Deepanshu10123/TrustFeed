@@ -12,6 +12,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from app.core.retry import with_retries
+
 RELEVANCE_MODEL = "gemini-3.5-flash-lite"
 
 SYSTEM_PROMPT = """You judge whether a piece of content genuinely discusses the topic
@@ -35,13 +37,16 @@ class RelevanceResult(BaseModel):
 
 
 def score_relevance(client: genai.Client, declared_topic: str, content: str) -> RelevanceResult:
-    response = client.models.generate_content(
-        model=RELEVANCE_MODEL,
-        contents=f"Declared topic: {declared_topic}\n\nContent: {content}",
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=RelevanceResult,
+    response = with_retries(
+        lambda: client.models.generate_content(
+            model=RELEVANCE_MODEL,
+            contents=f"Declared topic: {declared_topic}\n\nContent: {content}",
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=RelevanceResult,
+            ),
         ),
+        label="score_relevance",
     )
     return RelevanceResult.model_validate(json.loads(response.text))

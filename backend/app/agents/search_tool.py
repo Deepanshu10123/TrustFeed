@@ -20,6 +20,7 @@ from tavily import TavilyClient
 
 from app.agents.models import Source
 from app.core.config import get_redis_url, get_tavily_api_key
+from app.core.retry import with_retries
 
 CACHE_TTL_S = 60 * 60 * 24  # 24h -- factual search results don't go stale quickly
 
@@ -91,10 +92,11 @@ def search_web(query: str, max_results: int = 5) -> list[Source]:
         pass  # caching is an optimization, never a reason to fail the search
 
     try:
-        response = _get_client().search(query=query, max_results=max_results)
+        response = with_retries(lambda: _get_client().search(query=query, max_results=max_results), label="Tavily.search")
     except Exception as e:
-        # A failed search shouldn't crash the whole verification run --
-        # the Critic will just see "no evidence found" and can say so.
+        # A failed search (even after retries) shouldn't crash the whole
+        # verification run -- the Critic will just see "no evidence found"
+        # and can say so.
         return [Source(title="search error", url="", snippet=f"search failed: {e}")]
 
     results = [

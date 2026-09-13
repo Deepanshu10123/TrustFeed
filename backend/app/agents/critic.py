@@ -36,6 +36,7 @@ from mcp.client.stdio import stdio_client
 
 from app.agents.models import Source, Verdict, VerdictDraft
 from app.agents.search_tool import SEARCH_WEB_DECLARATION
+from app.core.retry import with_retries
 
 CRITIC_MODEL = "gemini-3.5-flash-lite"
 MAX_SEARCH_TURNS = 3
@@ -104,7 +105,10 @@ async def _run_research_loop(
     seen_sources: dict[str, Source] = {}
 
     for _ in range(MAX_SEARCH_TURNS):
-        response = client.models.generate_content(model=CRITIC_MODEL, contents=conversation, config=config)
+        response = with_retries(
+            lambda: client.models.generate_content(model=CRITIC_MODEL, contents=conversation, config=config),
+            label="Critic.research_turn",
+        )
         candidate = response.candidates[0]
         conversation.append(candidate.content)
 
@@ -177,14 +181,17 @@ async def _investigate_claim_async(client: genai.Client, claim: str) -> Verdict:
         )
     )
 
-    response = client.models.generate_content(
-        model=CRITIC_MODEL,
-        contents=conversation,
-        config=types.GenerateContentConfig(
-            system_instruction=COMMIT_SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=VerdictDraft,
+    response = with_retries(
+        lambda: client.models.generate_content(
+            model=CRITIC_MODEL,
+            contents=conversation,
+            config=types.GenerateContentConfig(
+                system_instruction=COMMIT_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=VerdictDraft,
+            ),
         ),
+        label="Critic.commit",
     )
     draft = VerdictDraft.model_validate(json.loads(response.text))
 

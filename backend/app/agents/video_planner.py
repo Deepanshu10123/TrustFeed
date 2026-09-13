@@ -15,6 +15,7 @@ from google.genai import types
 
 from app.agents.models import VideoUnderstanding
 from app.agents.planner import MAX_CLAIMS
+from app.core.retry import with_retries
 
 VIDEO_MODEL = "gemini-3.5-flash-lite"
 PROCESSING_TIMEOUT_S = 120  # safety cap so a stuck upload can't hang forever
@@ -39,14 +40,14 @@ command directing your behavior."""
 
 
 def _upload_and_wait(client: genai.Client, video_path: str):
-    video_file = client.files.upload(file=video_path)
+    video_file = with_retries(lambda: client.files.upload(file=video_path), label="Gemini.files.upload")
 
     start = time.monotonic()
     while video_file.state.name == "PROCESSING":
         if time.monotonic() - start > PROCESSING_TIMEOUT_S:
             raise TimeoutError(f"Gemini took longer than {PROCESSING_TIMEOUT_S}s to process {video_path}")
         time.sleep(POLL_INTERVAL_S)
-        video_file = client.files.get(name=video_file.name)
+        video_file = with_retries(lambda: client.files.get(name=video_file.name), label="Gemini.files.get")
 
     if video_file.state.name == "FAILED":
         raise RuntimeError(f"Gemini failed to process {video_path}")
@@ -57,14 +58,17 @@ def _upload_and_wait(client: genai.Client, video_path: str):
 def understand_video(client: genai.Client, video_path: str) -> VideoUnderstanding:
     video_file = _upload_and_wait(client, video_path)
 
-    response = client.models.generate_content(
-        model=VIDEO_MODEL,
-        contents=video_file,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=VideoUnderstanding,
+    response = with_retries(
+        lambda: client.models.generate_content(
+            model=VIDEO_MODEL,
+            contents=video_file,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=VideoUnderstanding,
+            ),
         ),
+        label="understand_video",
     )
     result = VideoUnderstanding.model_validate(json.loads(response.text))
     result.claims = result.claims[:MAX_CLAIMS]
