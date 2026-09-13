@@ -3,17 +3,23 @@ import { createTextPost, createVideoPost } from '../lib/api'
 import { TOPICS } from '../lib/topics'
 import './UploadScreen.css'
 
+const CUSTOM_TOPIC = '__custom__'
+
 export function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
   const [postType, setPostType] = useState<'text' | 'video'>('text')
   const [text, setText] = useState('')
   const [video, setVideo] = useState<File | null>(null)
   const [topic, setTopic] = useState('')
+  const [customTopic, setCustomTopic] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
 
+  const isCustomTopic = topic === CUSTOM_TOPIC
+  const finalTopic = isCustomTopic ? customTopic.trim() : topic
+
   async function handleSubmit() {
-    if (!topic) {
-      setMessage({ kind: 'error', text: 'Pick a topic first.' })
+    if (!finalTopic) {
+      setMessage({ kind: 'error', text: isCustomTopic ? 'Type your topic first.' : 'Pick a topic first.' })
       return
     }
     if (postType === 'text' && !text.trim()) {
@@ -29,14 +35,15 @@ export function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
     setMessage(null)
     try {
       if (postType === 'text') {
-        await createTextPost(topic, text)
+        await createTextPost(finalTopic, text)
       } else {
-        await createVideoPost(topic, video as File)
+        await createVideoPost(finalTopic, video as File)
       }
       setMessage({ kind: 'success', text: 'Submitted -- check My Posts for its status.' })
       setText('')
       setVideo(null)
       setTopic('')
+      setCustomTopic('')
       onUploaded()
     } catch (e) {
       setMessage({ kind: 'error', text: (e as Error).message })
@@ -99,8 +106,22 @@ export function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
               {t[0].toUpperCase() + t.slice(1)}
             </option>
           ))}
+          <option value={CUSTOM_TOPIC}>Something else...</option>
         </select>
-        <div className="field-hint">This is what your post gets checked against before it's shown to anyone.</div>
+        {isCustomTopic && (
+          <input
+            className="field-input"
+            placeholder="Type your own topic"
+            value={customTopic}
+            maxLength={40}
+            onChange={(e) => setCustomTopic(e.target.value)}
+          />
+        )}
+        <div className="field-hint">
+          {isCustomTopic
+            ? "Shown on your post like any other tag -- just not one people can filter their feed by, only the list above is."
+            : "This is what your post gets checked against before it's shown to anyone."}
+        </div>
       </div>
 
       {message && <div className={`upload-message ${message.kind}`}>{message.text}</div>}

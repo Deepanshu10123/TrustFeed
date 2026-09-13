@@ -64,8 +64,17 @@ async def create_post(
 ):
     if kind not in ("text", "video"):
         raise HTTPException(status_code=400, detail="kind must be 'text' or 'video'")
-    if declared_topic not in TOPICS:
-        raise HTTPException(status_code=400, detail=f"declared_topic must be one of {TOPICS}")
+    # Tagging isn't limited to the fixed list -- a post can be tagged with
+    # any short custom topic, shown on the post exactly like any other tag.
+    # It's deliberately *not* added to the fixed list interests are picked
+    # from (see Milestone 6): a custom-tagged post is discoverable by
+    # anyone with no interests set (which shows everything), just not
+    # through anyone's interest filter specifically.
+    declared_topic = declared_topic.strip()
+    if not declared_topic:
+        raise HTTPException(status_code=400, detail="declared_topic is required")
+    if len(declared_topic) > 40:
+        raise HTTPException(status_code=400, detail="declared_topic must be 40 characters or fewer")
 
     post_id = str(uuid.uuid4())
     supabase = get_supabase_client()
