@@ -281,9 +281,7 @@ async def get_feed(user=Depends(get_current_user)):
     prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
     topics = prefs.data[0]["topics"] if prefs.data else []
 
-    # Everyone else's published posts -- your own show up in My Posts, not
-    # mixed into the shared feed you're scrolling.
-    query = supabase.table("posts").select("*").eq("status", "published").neq("user_id", user.id)
+    query = supabase.table("posts").select("*").eq("status", "published")
     if topics:
         query = query.in_("declared_topic", topics)
     result = query.order("created_at", desc=True).limit(50).execute()
