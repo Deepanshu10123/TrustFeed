@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from storage3.exceptions import StorageApiError
 
 from app.api.auth import get_current_user, get_current_user_from_query
 from app.core.config import get_allowed_origins
@@ -75,7 +76,14 @@ async def create_post(
         # Without an explicit content-type, Supabase Storage serves the
         # file as text/plain, which browsers refuse to play as video.
         content_type = video.content_type or "video/mp4"
-        supabase.storage.from_(VIDEO_BUCKET).upload(storage_path, data, {"content-type": content_type})
+        try:
+            supabase.storage.from_(VIDEO_BUCKET).upload(storage_path, data, {"content-type": content_type})
+        except StorageApiError as e:
+            if e.status == 413:
+                raise HTTPException(
+                    status_code=413, detail="That video is too large to upload. Try a shorter clip."
+                ) from e
+            raise HTTPException(status_code=502, detail="Video upload failed, please try again.") from e
         content = storage_path
     else:
         if not text:
