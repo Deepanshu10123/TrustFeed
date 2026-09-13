@@ -13,6 +13,7 @@ from supabase import Client, create_client
 from app.core.config import get_supabase_service_key, get_supabase_url
 
 VIDEO_BUCKET = "videos"
+AVATAR_BUCKET = "avatars"
 
 _client: Client | None = None
 

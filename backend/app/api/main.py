@@ -7,6 +7,8 @@ Run it:
     uvicorn app.api.main:app --reload
 """
 
+import os
+import tempfile
 import uuid
 
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
@@ -18,7 +20,7 @@ from storage3.exceptions import StorageApiError
 from app.api.auth import get_current_user, get_current_user_from_query
 from app.core.config import get_allowed_origins
 from app.core.topics import TOPICS
-from app.db.supabase_client import VIDEO_BUCKET, get_supabase_client
+from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
 from app.jobs.progress import subscribe_progress
 from app.jobs.queue import enqueue
@@ -71,19 +73,33 @@ async def create_post(
     if kind == "video":
         if video is None:
             raise HTTPException(status_code=400, detail="video file required when kind='video'")
-        data = await video.read()
         storage_path = f"{user.id}/{post_id}/{video.filename}"
         # Without an explicit content-type, Supabase Storage serves the
         # file as text/plain, which browsers refuse to play as video.
         content_type = video.content_type or "video/mp4"
+        # Stream to a temp file on disk in chunks instead of `await
+        # video.read()`-ing the whole thing into one Python bytes object --
+        # this API runs on a small, fixed memory budget (Render's free
+        # tier), and loading a full video into RAM on top of this app's
+        # already-heavy import footprint (Gemini/Supabase/Redis clients)
+        # was enough to OOM-crash the whole process on a real upload, not
+        # just fail that one request. Passing a file path lets the
+        # underlying storage client stream it instead.
+        fd, tmp_path = tempfile.mkstemp()
         try:
-            supabase.storage.from_(VIDEO_BUCKET).upload(storage_path, data, {"content-type": content_type})
-        except StorageApiError as e:
-            if e.status == 413:
-                raise HTTPException(
-                    status_code=413, detail="That video is too large to upload. Try a shorter clip."
-                ) from e
-            raise HTTPException(status_code=502, detail="Video upload failed, please try again.") from e
+            with os.fdopen(fd, "wb") as tmp:
+                while chunk := await video.read(1024 * 1024):
+                    tmp.write(chunk)
+            try:
+                supabase.storage.from_(VIDEO_BUCKET).upload(storage_path, tmp_path, {"content-type": content_type})
+            except StorageApiError as e:
+                if e.status == 413:
+                    raise HTTPException(
+                        status_code=413, detail="That video is too large to upload. Try a shorter clip."
+                    ) from e
+                raise HTTPException(status_code=502, detail="Video upload failed, please try again.") from e
+        finally:
+            os.unlink(tmp_path)
         content = storage_path
     else:
         if not text:
@@ -149,6 +165,30 @@ async def stream_post_progress(post_id: str, user=Depends(get_current_user_from_
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.delete("/posts/{post_id}")
+async def delete_post(post_id: str, user=Depends(get_current_user)):
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("posts")
+        .select("*")
+        .eq("id", post_id)
+        .eq("user_id", user.id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = result.data[0]
+
+    if post["kind"] == "video":
+        try:
+            supabase.storage.from_(VIDEO_BUCKET).remove([post["content"]])
+        except Exception:
+            pass  # the post disappearing is what matters; an orphaned file isn't worth failing the delete over
+
+    supabase.table("posts").delete().eq("id", post_id).eq("user_id", user.id).execute()
+    return {"deleted": post_id}
+
+
 @app.get("/posts")
 async def list_my_posts(user=Depends(get_current_user)):
     result = (
@@ -184,6 +224,41 @@ async def set_interests(body: InterestsBody, user=Depends(get_current_user)):
     return {"topics": body.topics}
 
 
+@app.get("/profile")
+async def get_profile(user=Depends(get_current_user)):
+    result = get_supabase_client().table("user_preferences").select("avatar_url").eq("user_id", user.id).execute()
+    return {"avatar_url": result.data[0]["avatar_url"] if result.data else None}
+
+
+@app.post("/profile/avatar")
+async def upload_avatar(avatar: UploadFile, user=Depends(get_current_user)):
+    supabase = get_supabase_client()
+    content_type = avatar.content_type or "image/jpeg"
+    ext = os.path.splitext(avatar.filename or "")[1] or ".jpg"
+    # One fixed path per user (not one-per-upload like videos) with
+    # upsert=true -- a new avatar replaces the old file in place instead
+    # of piling up orphaned ones.
+    storage_path = f"{user.id}/avatar{ext}"
+
+    fd, tmp_path = tempfile.mkstemp()
+    try:
+        with os.fdopen(fd, "wb") as tmp:
+            while chunk := await avatar.read(1024 * 1024):
+                tmp.write(chunk)
+        try:
+            supabase.storage.from_(AVATAR_BUCKET).upload(
+                storage_path, tmp_path, {"content-type": content_type, "upsert": "true"}
+            )
+        except StorageApiError as e:
+            raise HTTPException(status_code=502, detail="Avatar upload failed, please try again.") from e
+    finally:
+        os.unlink(tmp_path)
+
+    avatar_url = supabase.storage.from_(AVATAR_BUCKET).get_public_url(storage_path)
+    supabase.table("user_preferences").upsert({"user_id": user.id, "avatar_url": avatar_url}).execute()
+    return {"avatar_url": avatar_url}
+
+
 @app.get("/feed")
 async def get_feed(user=Depends(get_current_user)):
     """Published posts from every user -- the shared feed, not just your own.
@@ -195,7 +270,9 @@ async def get_feed(user=Depends(get_current_user)):
     prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
     topics = prefs.data[0]["topics"] if prefs.data else []
 
-    query = supabase.table("posts").select("*").eq("status", "published")
+    # Everyone else's published posts -- your own show up in My Posts, not
+    # mixed into the shared feed you're scrolling.
+    query = supabase.table("posts").select("*").eq("status", "published").neq("user_id", user.id)
     if topics:
         query = query.in_("declared_topic", topics)
     result = query.order("created_at", desc=True).limit(50).execute()

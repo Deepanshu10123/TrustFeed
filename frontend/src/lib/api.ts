@@ -57,6 +57,20 @@ export async function getMyPosts(): Promise<Post[]> {
   return request('/posts')
 }
 
+export async function deletePost(postId: string): Promise<{ deleted: string }> {
+  return request(`/posts/${postId}`, { method: 'DELETE' })
+}
+
+export async function getProfile(): Promise<{ avatar_url: string | null }> {
+  return request('/profile')
+}
+
+export async function uploadAvatar(file: File): Promise<{ avatar_url: string }> {
+  const form = new FormData()
+  form.set('avatar', file)
+  return request('/profile/avatar', { method: 'POST', body: form })
+}
+
 export async function getFeed(): Promise<Post[]> {
   return request('/feed')
 }
