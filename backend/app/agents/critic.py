@@ -25,6 +25,7 @@ a fresh subprocess for every single search).
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -149,6 +150,16 @@ async def _investigate_claim_async(client: genai.Client, claim: str) -> Verdict:
         command=sys.executable,
         args=["-m", "app.mcp.search_server"],
         cwd=_BACKEND_DIR,
+        # `env` defaults to None, which the MCP library replaces with its
+        # own minimal environment (just PATH and a few OS basics) -- not
+        # this process's actual environment. That went unnoticed in local
+        # dev only because a backend/.env file on disk gets picked up
+        # fresh by the subprocess regardless; a real deployment (Render)
+        # has no .env file at all, so REDIS_URL/TAVILY_API_KEY never
+        # reached the subprocess there, and search_web() failed with an
+        # uncaught SystemExit (sys.exit() isn't an Exception, so none of
+        # this codebase's fail-open `except Exception` guards catch it).
+        env=dict(os.environ),
     )
 
     async with stdio_client(server_params) as (read, write):
