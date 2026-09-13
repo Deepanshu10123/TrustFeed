@@ -106,6 +106,22 @@ behavior, not manual polling). Goes into `.env` as `REDIS_URL`.
   comfortably longer than the blocking call's own timeout, and by treating
   that specific timeout exception as "no job" rather than letting it
   crash the worker loop.
+- **Post-roadmap fix, found by the worker actually running for a while:**
+  after the whole roadmap was declared complete, a background worker that
+  had been left running crashed with `redis.exceptions.ConnectionError:
+  ... An existing connection was forcibly closed by the remote host`
+  (Windows error 10054) on a later `BRPOP` call — a cloud Redis
+  connection over TLS getting reset mid-session is a real, known failure
+  mode, not a hypothetical one, and it only showed up because the process
+  had been alive long enough for it to happen (short demo runs never hit
+  it). `listen()` in `worker.py`'s main loop was the one place in the
+  whole service with **no** exception handling around it — any Redis
+  hiccup there took down the entire process, not just that one call.
+  Fixed by wrapping it in a try/except that logs, waits briefly, and lets
+  the next iteration get a fresh connection from the pool, rather than
+  crashing. Same trip also made `publish_progress()` (Milestone 7b) fail
+  open like the search cache already did — a progress-narration hiccup
+  should never be able to crash the worker either.
 - **A real logging gotcha:** the worker's `print()` output didn't appear
   in real time — Python fully buffers stdout (rather than flushing per
   line) when it isn't attached to a real terminal, which a background

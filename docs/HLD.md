@@ -1,6 +1,6 @@
 # TrustFeed — High-Level Design
 
-**Status:** Draft (Milestone 0) · **Last updated:** 2026-09-12
+**Status:** All planned milestones (0–8c) complete · **Last updated:** 2026-09-13
 
 ## What this is
 
@@ -99,7 +99,7 @@ In plain words — this is now **two separate services** talking through a queue
 | 7b | ✅ Live step-by-step streaming to the UI (Redis pub/sub + SSE) | The most impressive demo moment — watch the agent work, not a static spinner | Streaming, pub/sub |
 | 8a | ✅ Search result caching (Redis) + injection-resistant prompts, tested against real adversarial claims | Real cost/latency savings on repeats, and a real defense for a real risk (untrusted user + web content in prompts) | Caching, guardrails |
 | 8b | ✅ Human-in-the-loop: borderline gate decisions get a `needs_review` status instead of an automatic call | Not every decision should be fully automatic | Decision rules, escalation |
-| 8c | CI: automated tests on every push (fast tests only, not the LLM-calling ones) | Ready to show, not just run on a laptop | CI, test hygiene |
+| 8c | ✅ CI: automated tests on every push (fast tests only, not the LLM-calling ones) | Ready to show, not just run on a laptop | CI, test hygiene |
 
 Each milestone gets its own plan (options, scope, cons) and LLD before it's
 built — new decisions get added to the decision log as they're made.

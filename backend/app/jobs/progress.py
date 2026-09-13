@@ -33,7 +33,14 @@ def _channel(post_id: str) -> str:
 
 
 def publish_progress(post_id: str, message: str) -> None:
-    _get_sync_client().publish(_channel(post_id), message)
+    # Fails open, same philosophy as search_tool.py's cache: this is a
+    # nice-to-have live narration (Milestone 5's polling is the reliable
+    # way the frontend learns real status changes) -- a transient Redis
+    # hiccup here should never be the reason the worker crashes.
+    try:
+        _get_sync_client().publish(_channel(post_id), message)
+    except Exception:
+        pass
 
 
 async def subscribe_progress(post_id: str) -> AsyncGenerator[str]:

@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.auth import get_current_user, get_current_user_from_query
+from app.core.config import get_allowed_origins
 from app.core.topics import TOPICS
 from app.db.supabase_client import VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
@@ -39,13 +40,12 @@ def _attach_video_urls(posts: list[dict]) -> list[dict]:
             post["video_url"] = signed.get("signedUrl") or signed.get("signedURL")
     return posts
 
-# The frontend (Vite dev server today, a deployed Vercel origin later)
-# runs on a different origin than this API, so the browser needs
-# explicit permission to call it. Local dev origins only for now --
-# add the real deployed frontend origin here at Milestone 8.
+# The frontend (Vite dev server locally, a deployed Vercel origin in
+# production) runs on a different origin than this API, so the browser
+# needs explicit permission to call it -- see get_allowed_origins().
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=get_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

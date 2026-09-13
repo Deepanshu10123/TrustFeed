@@ -20,6 +20,7 @@ Usage:
 
 import os
 import tempfile
+import time
 from collections.abc import Callable
 
 from google import genai
@@ -87,7 +88,20 @@ def run_worker() -> None:
     print("[worker] Verification Service started, waiting for jobs...", flush=True)
 
     while True:
-        job = listen()
+        try:
+            job = listen()
+        except Exception as e:
+            # A cloud Redis connection over TLS can get reset by the
+            # remote host or network in between calls -- this is a real,
+            # observed failure mode (a BRPOP call died mid-loop with
+            # WinError 10054), not a hypothetical one. Losing the queue
+            # connection should never take down the whole service: log it,
+            # back off briefly, and let the next attempt get a fresh
+            # connection rather than crashing the process.
+            print(f"[worker] lost connection to the queue, retrying: {e}", flush=True)
+            time.sleep(2)
+            continue
+
         if job is None:
             continue  # nothing arrived within the poll timeout -- just keep waiting
 

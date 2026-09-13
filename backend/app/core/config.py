@@ -41,3 +41,14 @@ def get_supabase_anon_key() -> str:
 
 def get_supabase_service_key() -> str:
     return _require("SUPABASE_SERVICE_ROLE_KEY", "Create a free project at https://supabase.com")
+
+
+def get_allowed_origins() -> list[str]:
+    """Which frontend origin(s) the API accepts browser requests from
+    (CORS). Comma-separated in FRONTEND_ORIGIN for a deployed frontend
+    (e.g. a Vercel URL); falls back to the local Vite dev origins when
+    unset, so local dev keeps working with no .env change."""
+    raw = os.environ.get("FRONTEND_ORIGIN")
+    if not raw:
+        return ["http://localhost:5173", "http://127.0.0.1:5173"]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]

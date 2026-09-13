@@ -1,0 +1,58 @@
+# Render Blueprint -- deploys the API Service and the Verification
+# Service (ADR 0003) as two independent services from one repo.
+# In Render: New + -> Blueprint -> select this repo -> it reads this file.
+#
+# Neither service defines secrets inline (sync: false means "set this in
+# the Render dashboard yourself") -- copy the values from your local
+# backend/.env. Both services need the same env vars since either one
+# can end up needing to talk to Gemini, Tavily, Redis, or Supabase.
+#
+# Note: verify service/runtime field names against Render's current
+# Blueprint docs when you import this -- Render occasionally renames
+# these. If the import fails, the two services can be created by hand in
+# the dashboard instead, using the same build/start commands below.
+
+services:
+  - type: web
+    name: trustfeed-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+
+  - type: worker
+    name: trustfeed-verification-service
+    env: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.worker
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

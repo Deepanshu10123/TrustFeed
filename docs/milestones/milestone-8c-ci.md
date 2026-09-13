@@ -1,6 +1,6 @@
 # Milestone 8c — CI (LLD)
 
-**Status:** In progress · **Depends on:** all prior milestones · **Produces:** `.github/workflows/ci.yml`
+**Status:** Done · **Depends on:** all prior milestones · **Produces:** `.github/workflows/ci.yml`
 
 ## What this milestone proves
 
@@ -60,6 +60,29 @@ decision point, not a formality.
 
 ## Definition of done
 
-- [ ] The repo is committed and pushed to a real GitHub remote
-- [ ] The workflow runs automatically on push and both jobs pass
-- [ ] Neither job requires any repository secret to succeed
+- [x] The repo is committed and pushed to a real GitHub remote
+      (`github.com/Deepanshu10123/TrustFeed`)
+- [x] The workflow runs automatically on push and both jobs pass
+- [x] Neither job requires any repository secret to succeed
+
+## What actually happened, building this
+
+- **The user pushed the repo themselves, deliberately.** Git remote
+  operations (creating the repo, pushing) were explicitly kept in the
+  user's own hands rather than run on their behalf — the right call for
+  an action this consequential (public history, a real remote). Verified
+  the result read-only afterward via GitHub's public API (no `gh` CLI
+  available in this environment, and no auth needed since the repo is
+  public) rather than assuming success from the user's word alone.
+- **Both jobs passed on the very first real run, no fixes needed** —
+  confirms the empirical pre-checks (test_gate.py needs zero env vars,
+  the frontend builds with no .env present) were the right calls, not
+  just convenient assumptions.
+- **A real secret-exposure risk was caught before it could happen, not
+  after:** `.claude/settings.local.json` (Claude Code's local session
+  config) contained an old Tavily key from a permission-approval log
+  entry earlier in this session. It was never committed, but it would
+  have been swept up by a broad `git add .` if `.claude/` hadn't been
+  added to `.gitignore` first. Worth remembering for any future project
+  built with Claude Code in the loop: check `.claude/` before the first
+  commit, not after.

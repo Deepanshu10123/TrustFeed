@@ -10,13 +10,13 @@ can keep you scrolling.
 Full design: [docs/HLD.md](docs/HLD.md). Why each choice was made:
 [docs/decisions/](docs/decisions/).
 
-**Currently on Milestone 8** (Milestones 1–7 done — the full vision works:
-sign up, pick interests, upload text or video, watch a multi-agent
-pipeline verify it live step-by-step (MCP-served search tool, streamed
-progress over Redis pub/sub + SSE), and see it published or rejected with
-a reason, in a feed filtered to what you chose — see
-[docs/milestones/](docs/milestones/)). Full roadmap and status:
-[docs/HLD.md](docs/HLD.md#milestone-roadmap).
+**All planned milestones are complete.** Sign up, pick interests, upload
+text or video, watch a multi-agent pipeline (with an MCP-served search
+tool) verify it live step-by-step over Server-Sent Events, and see it
+published, rejected, or flagged for human review — in a feed filtered to
+what you actually chose, with a real CI pipeline running on every push.
+See [docs/milestones/](docs/milestones/) for how each piece was built,
+and [docs/HLD.md](docs/HLD.md#milestone-roadmap) for the full roadmap.
 
 ## Layout
 
