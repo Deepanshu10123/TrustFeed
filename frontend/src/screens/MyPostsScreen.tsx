@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { deletePost, getMyPosts, getProfile, progressStreamUrl, uploadAvatar } from '../lib/api'
+import { deletePost, getMyPosts, getProfile, progressStreamUrl, retryPost, uploadAvatar } from '../lib/api'
 import type { Post, PostStatus } from '../lib/types'
 import { previewFor, timeAgo } from '../lib/format'
 import './MyPostsScreen.css'
@@ -63,6 +63,13 @@ function VideoThumb({ src }: { src: string }) {
   )
 }
 
+// The raw error isn't shown -- it's technical -- just which kind of failure.
+function failureMessage(post: Post): string {
+  return post.report?.error?.includes('took too long')
+    ? 'This took too long and was stopped.'
+    : 'Something went wrong while checking this post.'
+}
+
 function StatusBadge({ status }: { status: PostStatus }) {
   if (status === 'processing') {
     return (
@@ -86,6 +93,8 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     getMyPosts()
@@ -137,6 +146,19 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
     }
   }
 
+  async function handleRetry(postId: string) {
+    setRetrying(true)
+    setRetryError(null)
+    try {
+      await retryPost(postId)
+      load()
+    } catch {
+      setRetryError("Couldn't put it back in the queue. Please try again in a moment.")
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   async function handleDelete(postId: string) {
     if (!window.confirm('Delete this post? This removes it everywhere, including the shared feed.')) return
     setDeleteError(null)
@@ -181,7 +203,15 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
         ) : (
           <div className="profile-grid">
             {posts.map((post) => (
-              <button key={post.id} className="grid-tile" onClick={() => setSelected(post)} type="button">
+              <button
+                key={post.id}
+                className="grid-tile"
+                onClick={() => {
+                  setSelected(post)
+                  setRetryError(null)
+                }}
+                type="button"
+              >
                 {post.kind === 'video' && post.video_url ? (
                   <VideoThumb src={post.video_url} />
                 ) : (
@@ -217,7 +247,15 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
                 {selected.rejection_reason ?? 'This one is borderline -- a human needs to take a look before it can be shown.'}
               </div>
             )}
-            {selected.status === 'failed' && <div className="status-sub">Something went wrong processing this post.</div>}
+            {selected.status === 'failed' && (
+              <>
+                <div className="status-sub">{failureMessage(selected)} You can try again.</div>
+                {retryError && <div className="status-sub delete-error">{retryError}</div>}
+                <button className="retry-btn" type="button" disabled={retrying} onClick={() => handleRetry(selected.id)}>
+                  {retrying ? 'Sending...' : 'Try again'}
+                </button>
+              </>
+            )}
             {selected.status === 'hidden' && (
               <div className="status-sub">Several people reported this post, so it's been taken out of the feed.</div>
             )}

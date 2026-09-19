@@ -53,6 +53,17 @@ def get_report_hide_threshold() -> int:
         return 3
 
 
+def get_stuck_post_minutes() -> int:
+    """How long a post can sit in "processing" before it's treated as lost
+    and marked failed. 10 unless STUCK_POST_MINUTES says otherwise --
+    generous on purpose, since with one worker a post can legitimately wait
+    behind others."""
+    try:
+        return max(1, int(os.environ.get("STUCK_POST_MINUTES", "10")))
+    except ValueError:
+        return 10
+
+
 def get_allowed_origins() -> list[str]:
     """Which frontend origin(s) the API accepts browser requests from
     (CORS). Comma-separated in FRONTEND_ORIGIN for a deployed frontend

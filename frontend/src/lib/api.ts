@@ -57,6 +57,10 @@ export async function getMyPosts(): Promise<Post[]> {
   return request('/posts')
 }
 
+export async function retryPost(postId: string): Promise<{ post_id: string; status: string }> {
+  return request(`/posts/${postId}/retry`, { method: 'POST' })
+}
+
 export async function deletePost(postId: string): Promise<{ deleted: string }> {
   return request(`/posts/${postId}`, { method: 'DELETE' })
 }

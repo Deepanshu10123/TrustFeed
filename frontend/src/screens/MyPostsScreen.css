@@ -101,6 +101,13 @@
   font: 600 12px/1 'Public Sans', sans-serif; color: var(--unsupported-fg);
 }
 .mypost-delete:hover { text-decoration: underline; }
+.retry-btn {
+  align-self: flex-start; min-height: 40px; padding: 10px 18px;
+  border-radius: 10px; border: none; cursor: pointer;
+  background: var(--btn-bg); color: var(--btn-fg);
+  font: 600 13.5px/1 'Public Sans', sans-serif;
+}
+.retry-btn:disabled { opacity: 0.6; cursor: default; }
 .delete-error { color: var(--unsupported-fg); }
 .spin {
   width: 10px; height: 10px; border-radius: 999px;

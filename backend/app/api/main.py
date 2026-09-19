@@ -11,6 +11,7 @@ import asyncio
 import os
 import tempfile
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,8 @@ from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
 from app.api.auth import get_current_user, get_current_user_from_query
-from app.core.config import get_allowed_origins, get_report_hide_threshold
+from app.core.config import get_allowed_origins, get_report_hide_threshold, get_stuck_post_minutes
+from app.core.stuck import find_stuck
 from app.core.topics import TOPICS
 from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
@@ -65,6 +67,25 @@ def _like_info(post_ids: list[str], user_id: str) -> dict[str, dict]:
 def _like_state(post_id: str, user_id: str) -> dict:
     info = _like_info([post_id], user_id).get(post_id, {})
     return {"liked": info.get("liked_by_me", False), "like_count": info.get("like_count", 0)}
+
+
+def _fail_stuck_posts(posts: list[dict]) -> None:
+    """Marks posts whose job got lost (see app/core/stuck.py) as failed --
+    in the database and in `posts` -- so their owner sees a real state with
+    a Try again button instead of a spinner that never ends. Only touches
+    the database when something is actually stuck, so the usual poll costs
+    nothing extra."""
+    stuck = find_stuck(posts, get_stuck_post_minutes())
+    if not stuck:
+        return
+    error = {"error": "This took too long and was stopped."}
+    # The status check means a post that finished a moment ago isn't clobbered.
+    get_supabase_client().table("posts").update({"status": "failed", "report": error}).in_(
+        "id", [p["id"] for p in stuck]
+    ).eq("status", "processing").execute()
+    for post in stuck:
+        post["status"] = "failed"
+        post["report"] = error
 
 
 def _reported_by(post_ids: list[str], user_id: str) -> set[str]:
@@ -244,6 +265,42 @@ async def stream_post_progress(post_id: str, user=Depends(get_current_user_from_
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.post("/posts/{post_id}/retry")
+async def retry_post(post_id: str, user=Depends(get_current_user)):
+    """Puts one of your failed posts back in the queue to be checked again."""
+    supabase = get_supabase_client()
+    # Claimed in a single update: only a *failed* post of yours qualifies,
+    # and once claimed it's "processing" -- so a second click or a double tap
+    # finds nothing to claim instead of queuing the job twice.
+    claimed = (
+        supabase.table("posts")
+        .update({
+            "status": "processing",
+            "report": None,
+            "relevance_score": None,
+            "rejection_reason": None,
+            "queued_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", post_id)
+        .eq("user_id", user.id)
+        .eq("status", "failed")
+        .execute()
+        .data
+    )
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Only a failed post can be tried again")
+
+    post = claimed[0]
+    try:
+        enqueue(Job(job_id=post_id, kind=post["kind"], content=post["content"], declared_topic=post["declared_topic"]))
+    except Exception as e:
+        # Couldn't reach the queue -- put it back rather than leave it
+        # looking busy when nothing is actually working on it.
+        supabase.table("posts").update({"status": "failed"}).eq("id", post_id).execute()
+        raise HTTPException(status_code=502, detail="Couldn't queue the post, please try again") from e
+    return {"post_id": post_id, "status": "processing"}
+
+
 @app.delete("/posts/{post_id}")
 async def delete_post(post_id: str, user=Depends(get_current_user)):
     supabase = get_supabase_client()
@@ -278,7 +335,9 @@ async def list_my_posts(user=Depends(get_current_user)):
         .order("created_at", desc=True)
         .execute()
     )
-    return _attach_video_urls(result.data)
+    posts = result.data
+    _fail_stuck_posts(posts)
+    return _attach_video_urls(posts)
 
 
 class InterestsBody(BaseModel):

@@ -99,3 +99,10 @@ alter table reports enable row level security;
 --   put a hidden post back (delete its reports too, or one more report hides it again):
 --     update posts set status = 'published' where id = '<post id>';
 --     delete from reports where post_id = '<post id>';
+
+-- When a post was last put in the queue: set on upload (the default) and
+-- again by every "Try again". A post still 'processing' STUCK_POST_MINUTES
+-- (default 10) after this is one whose job got lost -- the worker crashed
+-- or restarted mid-check -- so the API marks it failed and lets its owner
+-- retry it. Existing rows get the moment this runs, which is fine.
+alter table posts add column queued_at timestamptz not null default now();
