@@ -27,14 +27,52 @@ export async function progressStreamUrl(postId: string): Promise<string> {
   return `${API_BASE_URL}/posts/${postId}/stream?token=${encodeURIComponent(token)}`
 }
 
+/** What to show for a failed request: the API's own plain-language `detail`
+ * when it sent one ("You've used all 5 video uploads..."), otherwise the raw
+ * status and body. */
+function errorMessage(status: number, statusText: string, body: string): string {
+  try {
+    const detail = JSON.parse(body).detail
+    if (typeof detail === 'string') return detail
+  } catch {
+    // not JSON -- fall through to the raw text
+  }
+  return `${status} ${statusText}: ${body}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = { ...(await authHeader()), ...(init?.headers ?? {}) }
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
   if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`${response.status} ${response.statusText}: ${body}`)
+    throw new Error(errorMessage(response.status, response.statusText, await response.text()))
   }
   return response.json()
+}
+
+export interface UploadProgress {
+  percent: number // 0-100 of the file that has left the browser
+  sent: boolean // all of it has -- the server still has work to do before it answers
+}
+
+/** fetch can't say how much of an upload has gone out, XMLHttpRequest can --
+ * so video uploads go this way to drive the progress bar. */
+async function uploadWithProgress<T>(path: string, form: FormData, onProgress: (p: UploadProgress) => void): Promise<T> {
+  const token = await getAccessToken()
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE_URL}${path}`)
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress({ percent: Math.round((e.loaded / e.total) * 100), sent: false })
+    }
+    xhr.upload.onload = () => onProgress({ percent: 100, sent: true })
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText) as T)
+      else reject(new Error(errorMessage(xhr.status, xhr.statusText, xhr.responseText)))
+    }
+    xhr.onerror = () => reject(new Error("Couldn't reach the server. Check your connection and try again."))
+    xhr.send(form)
+  })
 }
 
 export async function createTextPost(declaredTopic: string, text: string): Promise<{ post_id: string; status: string }> {
@@ -45,12 +83,16 @@ export async function createTextPost(declaredTopic: string, text: string): Promi
   return request('/posts', { method: 'POST', body: form })
 }
 
-export async function createVideoPost(declaredTopic: string, video: File): Promise<{ post_id: string; status: string }> {
+export async function createVideoPost(
+  declaredTopic: string,
+  video: File,
+  onProgress: (p: UploadProgress) => void,
+): Promise<{ post_id: string; status: string }> {
   const form = new FormData()
   form.set('kind', 'video')
   form.set('declared_topic', declaredTopic)
   form.set('video', video)
-  return request('/posts', { method: 'POST', body: form })
+  return uploadWithProgress('/posts', form, onProgress)
 }
 
 export async function getMyPosts(): Promise<Post[]> {

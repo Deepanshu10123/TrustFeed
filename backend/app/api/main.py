@@ -11,7 +11,7 @@ import asyncio
 import os
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +20,15 @@ from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
 from app.api.auth import get_current_user, get_current_user_from_query
-from app.core.config import get_allowed_origins, get_report_hide_threshold, get_stuck_post_minutes
+from app.core.config import (
+    get_allowed_origins,
+    get_daily_post_limit,
+    get_daily_video_limit,
+    get_max_video_mb,
+    get_report_hide_threshold,
+    get_stuck_post_minutes,
+)
+from app.core.limits import daily_limit_error
 from app.core.stuck import find_stuck
 from app.core.topics import TOPICS
 from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_client
@@ -160,8 +168,23 @@ async def create_post(
     if len(declared_topic) > 40:
         raise HTTPException(status_code=400, detail="declared_topic must be 40 characters or fewer")
 
+    # Checked before any work is done: the size costs nothing to look at,
+    # and it saves streaming a file that was never going to be accepted.
+    max_video_mb = get_max_video_mb()
+    if kind == "video" and video is not None and video.size is not None and video.size > max_video_mb * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"That video is over the {max_video_mb} MB limit. Try a shorter clip.")
+
     post_id = str(uuid.uuid4())
     supabase = get_supabase_client()
+
+    # Every video costs a burst of Gemini calls, and Gemini's free tier only
+    # allows so many -- so a person can only post so much in 24 hours. Deleted
+    # posts stop counting (a stricter version would need a separate log).
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recent = supabase.table("posts").select("kind").eq("user_id", user.id).gte("created_at", since).execute().data
+    too_many = daily_limit_error([r["kind"] for r in recent], kind, get_daily_video_limit(), get_daily_post_limit())
+    if too_many:
+        raise HTTPException(status_code=429, detail=too_many)
 
     if kind == "video":
         if video is None:

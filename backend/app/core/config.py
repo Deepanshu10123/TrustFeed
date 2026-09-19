@@ -43,14 +43,20 @@ def get_supabase_service_key() -> str:
     return _require("SUPABASE_SERVICE_ROLE_KEY", "Create a free project at https://supabase.com")
 
 
+def _int_env(name: str, default: int, minimum: int = 1) -> int:
+    """A whole-number setting from the environment: the default when it's
+    unset or isn't a number, and never below `minimum`."""
+    try:
+        return max(minimum, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
 def get_report_hide_threshold() -> int:
     """How many different people have to report a post before it's taken
     out of the feed. 3 unless REPORT_HIDE_THRESHOLD says otherwise -- handy
     to set to 1 for a moment when testing the report flow."""
-    try:
-        return max(1, int(os.environ.get("REPORT_HIDE_THRESHOLD", "3")))
-    except ValueError:
-        return 3
+    return _int_env("REPORT_HIDE_THRESHOLD", 3)
 
 
 def get_stuck_post_minutes() -> int:
@@ -58,10 +64,26 @@ def get_stuck_post_minutes() -> int:
     and marked failed. 10 unless STUCK_POST_MINUTES says otherwise --
     generous on purpose, since with one worker a post can legitimately wait
     behind others."""
-    try:
-        return max(1, int(os.environ.get("STUCK_POST_MINUTES", "10")))
-    except ValueError:
-        return 10
+    return _int_env("STUCK_POST_MINUTES", 10)
+
+
+def get_max_video_mb() -> int:
+    """Largest video accepted, in MB. 50 unless MAX_VIDEO_MB says otherwise
+    -- that's what the free Supabase Storage plan allows per file, so raise
+    it only along with the bucket's own limit."""
+    return _int_env("MAX_VIDEO_MB", 50)
+
+
+def get_daily_video_limit() -> int:
+    """Video uploads one person can make in 24 hours. 5 unless
+    DAILY_VIDEO_LIMIT says otherwise."""
+    return _int_env("DAILY_VIDEO_LIMIT", 5)
+
+
+def get_daily_post_limit() -> int:
+    """Posts of any kind (text or video) one person can make in 24 hours.
+    20 unless DAILY_POST_LIMIT says otherwise."""
+    return _int_env("DAILY_POST_LIMIT", 20)
 
 
 def get_allowed_origins() -> list[str]:

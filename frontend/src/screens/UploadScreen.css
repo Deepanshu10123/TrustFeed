@@ -46,6 +46,9 @@
   min-height: 48px;
 }
 .btn-primary:disabled { opacity: 0.6; cursor: default; }
+.upload-progress { height: 6px; border-radius: 999px; background: var(--chip-bg); overflow: hidden; }
+.upload-progress-bar { height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { .upload-progress-bar { transition: none; } }
 .upload-message {
   font: 500 13.5px/1.4 'Public Sans', sans-serif;
   padding: 10px 12px; border-radius: 8px;
