@@ -77,8 +77,9 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
   const { session } = useAuth()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [username, setUsernameValue] = useState<string | null>(null)
-  const [followerCount, setFollowerCount] = useState(0)
-  const [followingCount, setFollowingCount] = useState(0)
+  // null until the server has said -- shown as a dash, not as a made-up 0
+  const [followerCount, setFollowerCount] = useState<number | null>(null)
+  const [followingCount, setFollowingCount] = useState<number | null>(null)
   const [editingUsername, setEditingUsername] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
@@ -100,8 +101,9 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
       .then((p) => {
         setAvatarUrl(p.avatar_url)
         setUsernameValue(p.username)
-        setFollowerCount(p.follower_count)
-        setFollowingCount(p.following_count)
+        // `?? null`: right after an update the site can briefly be newer than the server
+        setFollowerCount(p.follower_count ?? null)
+        setFollowingCount(p.following_count ?? null)
       })
       .catch(() => {}) // no profile row yet just means no avatar or username set -- not worth surfacing as an error
   }, [])
@@ -199,11 +201,11 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
             <span>Published</span>
           </div>
           <div className="stat">
-            <strong>{followerCount}</strong>
+            <strong>{followerCount ?? '–'}</strong>
             <span>Followers</span>
           </div>
           <div className="stat">
-            <strong>{followingCount}</strong>
+            <strong>{followingCount ?? '–'}</strong>
             <span>Following</span>
           </div>
         </div>
