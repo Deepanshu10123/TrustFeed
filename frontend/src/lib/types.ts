@@ -1,5 +1,5 @@
 export type PostKind = 'text' | 'video'
-export type PostStatus = 'processing' | 'published' | 'rejected' | 'needs_review' | 'failed'
+export type PostStatus = 'processing' | 'published' | 'rejected' | 'needs_review' | 'failed' | 'hidden'
 export type VerdictLabel = 'Well Supported' | 'Mixed Evidence' | 'Unsupported' | 'Unable to Verify'
 
 export interface Source {

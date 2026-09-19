@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
 from app.api.auth import get_current_user, get_current_user_from_query
-from app.core.config import get_allowed_origins
+from app.core.config import get_allowed_origins, get_report_hide_threshold
 from app.core.topics import TOPICS
 from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
@@ -65,6 +65,32 @@ def _like_info(post_ids: list[str], user_id: str) -> dict[str, dict]:
 def _like_state(post_id: str, user_id: str) -> dict:
     info = _like_info([post_id], user_id).get(post_id, {})
     return {"liked": info.get("liked_by_me", False), "like_count": info.get("like_count", 0)}
+
+
+def _reported_by(post_ids: list[str], user_id: str) -> set[str]:
+    """Which of these posts this user has already reported."""
+    rows = (
+        get_supabase_client()
+        .table("reports")
+        .select("post_id")
+        .eq("user_id", user_id)
+        .in_("post_id", post_ids)
+        .execute()
+        .data
+    )
+    return {row["post_id"] for row in rows}
+
+
+async def _optional(label: str, default, fn, *args):
+    """Runs a blocking lookup in a thread. If it fails, logs it and returns
+    `default` instead -- for add-ons to the feed (likes, your own reports)
+    that shouldn't be able to take the whole feed down, e.g. before the SQL
+    they need has been run."""
+    try:
+        return await asyncio.to_thread(fn, *args)
+    except Exception as e:
+        print(f"[{label}] lookup failed, carrying on without it: {e}", flush=True)
+        return default
 
 
 def _avatar_urls(user_ids: list[str]) -> dict[str, str | None]:
@@ -335,32 +361,60 @@ async def get_feed(user=Depends(get_current_user)):
     if not posts:
         return posts
 
-    # The three lookups below only need the posts just fetched, not each
-    # other -- run them at once instead of one after another, since each is
-    # a full round trip to a database on the other side of the world.
+    # The lookups below only need the posts just fetched, not each other --
+    # run them at once instead of one after another, since each is a full
+    # round trip to a database on the other side of the world.
     post_ids = [p["id"] for p in posts]
     user_ids = list({p["user_id"] for p in posts})
 
-    async def like_info_or_empty() -> dict[str, dict]:
-        # Likes are an add-on to the feed, not a reason for the feed itself
-        # to fail (e.g. if the like_info() SQL hasn't been run yet).
-        try:
-            return await asyncio.to_thread(_like_info, post_ids, user.id)
-        except Exception as e:
-            print(f"[likes] couldn't load like info: {e}", flush=True)
-            return {}
-
-    like_info, avatars, _ = await asyncio.gather(
-        like_info_or_empty(),
+    like_info, avatars, reported, _ = await asyncio.gather(
+        _optional("likes", {}, _like_info, post_ids, user.id),
         asyncio.to_thread(_avatar_urls, user_ids),
+        _optional("reports", set(), _reported_by, post_ids, user.id),
         asyncio.to_thread(_attach_video_urls, posts),
     )
+    # A post you've reported stays out of your feed, not just until you refresh.
+    posts = [p for p in posts if p["id"] not in reported]
     for post in posts:
         info = like_info.get(post["id"], {})
         post["like_count"] = info.get("like_count", 0)
         post["liked_by_me"] = info.get("liked_by_me", False)
         post["uploader_avatar_url"] = avatars.get(post["user_id"])
     return posts
+
+
+REPORT_REASONS = {"misleading", "hateful", "dangerous", "spam", "other"}
+
+
+class ReportBody(BaseModel):
+    reason: str
+    note: str | None = None
+
+
+@app.post("/posts/{post_id}/report")
+async def report_post(post_id: str, body: ReportBody, user=Depends(get_current_user)):
+    if body.reason not in REPORT_REASONS:
+        raise HTTPException(status_code=400, detail=f"reason must be one of {sorted(REPORT_REASONS)}")
+    note = (body.note or "").strip()
+    if len(note) > 300:
+        raise HTTPException(status_code=400, detail="note must be 300 characters or fewer")
+
+    supabase = get_supabase_client()
+    # (post_id, user_id) is the table's primary key: one report per person
+    # per post, so nobody can hide a post on their own by reporting it over
+    # and over -- it takes several different people.
+    supabase.table("reports").upsert(
+        {"post_id": post_id, "user_id": user.id, "reason": body.reason, "note": note or None},
+        on_conflict="post_id,user_id",
+        ignore_duplicates=True,
+    ).execute()
+
+    total = supabase.table("reports").select("user_id", count="exact", head=True).eq("post_id", post_id).execute().count
+    if total is not None and total >= get_report_hide_threshold():
+        # Only a live post gets hidden -- never one that's still being
+        # checked or was already decided some other way.
+        supabase.table("posts").update({"status": "hidden"}).eq("id", post_id).eq("status", "published").execute()
+    return {"reported": True}
 
 
 @app.put("/posts/{post_id}/like")

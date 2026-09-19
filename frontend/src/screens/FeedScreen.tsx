@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import { EvidenceSheet } from './EvidenceSheet'
+import { ReportSheet } from './ReportSheet'
 import './FeedScreen.css'
 
 // A stable-but-varied background per post -- shown behind the real
@@ -176,6 +177,7 @@ export function FeedScreen() {
   const [muted, setMuted] = useState(true)
   const [commentsPost, setCommentsPost] = useState<Post | null>(null)
   const [evidencePost, setEvidencePost] = useState<Post | null>(null)
+  const [reportingPost, setReportingPost] = useState<Post | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [pausedIds, setPausedIds] = useState<Set<string>>(() => new Set())
   // Only one caption is open at a time -- opening another closes this one.
@@ -193,6 +195,14 @@ export function FeedScreen() {
   function showToast(message: string) {
     setToast(message)
     setTimeout(() => setToast(null), 2200)
+  }
+
+  // The server keeps a post you've reported out of your feed from now on;
+  // this just takes it off the screen straight away.
+  function handleReported(postId: string) {
+    setReportingPost(null)
+    setPosts((prev) => prev?.filter((p) => p.id !== postId) ?? prev)
+    showToast("Thanks for reporting. It's off your feed now.")
   }
 
   function togglePause(postId: string) {
@@ -273,6 +283,7 @@ export function FeedScreen() {
         const expanded = expandedId === post.id
         const paused = pausedIds.has(post.id)
         const liked = post.liked_by_me ?? false
+        const isMine = post.user_id === session?.user.id
         return (
           <div key={post.id} className={`feed-slide${expanded ? ' expanded' : ''}`} style={bgStyleFor(post.id)}>
             {post.kind === 'text' && <div className="slide-quote">&ldquo;{post.content}&rdquo;</div>}
@@ -298,9 +309,11 @@ export function FeedScreen() {
                   )}
                 </button>
               </div>
-              <button className="icon-pill wide" type="button" aria-label="More">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
-              </button>
+              {!isMine && (
+                <button className="icon-pill wide" type="button" aria-label="Report this post" onClick={() => setReportingPost(post)}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                </button>
+              )}
             </div>
 
             <div className="side-rail">
@@ -378,6 +391,9 @@ export function FeedScreen() {
       <CommentsSheet post={commentsPost} currentUserId={session?.user.id} onClose={() => setCommentsPost(null)} />
     )}
     {evidencePost && <EvidenceSheet post={evidencePost} onClose={() => setEvidencePost(null)} />}
+    {reportingPost && (
+      <ReportSheet post={reportingPost} onClose={() => setReportingPost(null)} onReported={handleReported} />
+    )}
     {toast && <div className="feed-toast">{toast}</div>}
     </>
   )

@@ -56,6 +56,7 @@
 .grid-dot.rejected { background: var(--unsupported-fg); }
 .grid-dot.review { background: var(--mixed-fg); }
 .grid-dot.failed { background: var(--unsupported-fg); }
+.grid-dot.hidden { background: var(--unable-fg); }
 .grid-reel-icon {
   position: absolute; bottom: 6px; right: 6px; color: #fff;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
@@ -91,6 +92,7 @@
 .status-badge.rejected { background: var(--unsupported-bg); color: var(--unsupported-fg); }
 .status-badge.review { background: var(--mixed-bg); color: var(--mixed-fg); }
 .status-badge.failed { background: var(--unsupported-bg); color: var(--unsupported-fg); }
+.status-badge.hidden { background: var(--unable-bg); color: var(--unable-fg); }
 .status-sub { font: 400 13px/1.45 'Public Sans', sans-serif; color: var(--text-secondary); }
 .mypost-time { font: 500 12px/1 'Public Sans', sans-serif; color: var(--text-tertiary); }
 .mypost-bottom { display: flex; align-items: center; justify-content: space-between; }

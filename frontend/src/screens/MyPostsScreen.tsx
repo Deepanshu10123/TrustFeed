@@ -12,6 +12,7 @@ const STATUS_DOT: Record<PostStatus, string> = {
   rejected: 'rejected',
   needs_review: 'review',
   failed: 'failed',
+  hidden: 'hidden',
 }
 
 /** Milestone 7b: shows the live step text for one processing post via
@@ -74,6 +75,7 @@ function StatusBadge({ status }: { status: PostStatus }) {
   if (status === 'published') return <span className="status-badge published">Published</span>
   if (status === 'rejected') return <span className="status-badge rejected">Rejected</span>
   if (status === 'needs_review') return <span className="status-badge review">Needs Review</span>
+  if (status === 'hidden') return <span className="status-badge hidden">Hidden</span>
   return <span className="status-badge failed">Failed</span>
 }
 
@@ -216,6 +218,9 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
               </div>
             )}
             {selected.status === 'failed' && <div className="status-sub">Something went wrong processing this post.</div>}
+            {selected.status === 'hidden' && (
+              <div className="status-sub">Several people reported this post, so it's been taken out of the feed.</div>
+            )}
             <div className="mypost-bottom">
               <span className="mypost-time">{timeAgo(selected.created_at)}</span>
               <button className="mypost-delete" onClick={() => handleDelete(selected.id)} type="button">

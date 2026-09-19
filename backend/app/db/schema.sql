@@ -70,3 +70,32 @@ $$;
 alter table likes enable row level security;
 alter table comments enable row level security;
 alter table user_preferences enable row level security;
+
+-- Reports: one row per (post, reporter). The composite primary key means one
+-- person can only report a post once, so hiding a post takes several
+-- different people (the API hides a published post once
+-- REPORT_HIDE_THRESHOLD, default 3, of them have reported it -- it sets the
+-- post's status to 'hidden', which keeps it out of the feed).
+create table reports (
+  post_id uuid not null references posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  reason text not null,   -- misleading | hateful | dangerous | spam | other
+  note text,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+alter table reports enable row level security;
+
+-- Handy when you want to review reports by hand (not part of the migration):
+--
+--   most-reported posts first:
+--     select p.id, p.status, p.declared_topic, left(p.content, 60) as content, count(*) as reports
+--     from reports r join posts p on p.id = r.post_id
+--     group by p.id order by reports desc;
+--
+--   what people said about one post:
+--     select reason, note, created_at from reports where post_id = '<post id>';
+--
+--   put a hidden post back (delete its reports too, or one more report hides it again):
+--     update posts set status = 'published' where id = '<post id>';
+--     delete from reports where post_id = '<post id>';

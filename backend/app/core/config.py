@@ -43,6 +43,16 @@ def get_supabase_service_key() -> str:
     return _require("SUPABASE_SERVICE_ROLE_KEY", "Create a free project at https://supabase.com")
 
 
+def get_report_hide_threshold() -> int:
+    """How many different people have to report a post before it's taken
+    out of the feed. 3 unless REPORT_HIDE_THRESHOLD says otherwise -- handy
+    to set to 1 for a moment when testing the report flow."""
+    try:
+        return max(1, int(os.environ.get("REPORT_HIDE_THRESHOLD", "3")))
+    except ValueError:
+        return 3
+
+
 def get_allowed_origins() -> list[str]:
     """Which frontend origin(s) the API accepts browser requests from
     (CORS). Comma-separated in FRONTEND_ORIGIN for a deployed frontend

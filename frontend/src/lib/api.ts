@@ -83,6 +83,14 @@ export async function unlikePost(postId: string): Promise<{ liked: boolean; like
   return request(`/posts/${postId}/like`, { method: 'DELETE' })
 }
 
+export async function reportPost(postId: string, reason: string, note?: string): Promise<{ reported: boolean }> {
+  return request(`/posts/${postId}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason, note }),
+  })
+}
+
 export async function getComments(postId: string): Promise<Comment[]> {
   return request(`/posts/${postId}/comments`)
 }
