@@ -1,0 +1,23 @@
+{
+  "name": "trustfeed-promo-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The LinkedIn marketing video for TrustFeed, built with Remotion (React -> MP4).",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render TrustFeedPromo out/trustfeed-promo.mp4 --crf=18",
+    "still": "remotion still TrustFeedPromo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.526",
+    "@remotion/google-fonts": "4.0.526",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remotion": "4.0.526"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

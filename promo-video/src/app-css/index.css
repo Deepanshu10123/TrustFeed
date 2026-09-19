@@ -1,0 +1,90 @@
+/* Design tokens carried over directly from the approved mockup --
+   see design/trustfeed-mockup/. Dark theme only, by design choice. */
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: 'Public Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+button { font-family: inherit; }
+a { color: var(--text-secondary); }
+
+/* Loading animation: a check mark drawing itself inside a ring. The same markup
+   is in index.html (on screen before any code has loaded) and in the Loader
+   component -- keep them in step. Lives here so it's ready at first paint. */
+.splash {
+  width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center;
+  /* Sits where the feed's own loader will (above the tab bar) so it doesn't jump. */
+  padding-bottom: 57px;
+}
+.loader { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--accent); text-align: center; }
+.loader-mark { width: 76px; height: 76px; overflow: visible; filter: drop-shadow(0 0 12px oklch(72% 0.1 262 / 0.5)); }
+.loader-ring, .loader-check { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.loader-ring {
+  transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; /* start at the top */
+  animation: loader-ring 2.6s ease-in-out infinite;
+}
+.loader-check { animation: loader-check 2.6s ease-in-out infinite; }
+/* Each stroke draws in, holds, then wipes out the way it came -- so the loop is seamless. */
+@keyframes loader-ring { 0% { stroke-dashoffset: 1; } 40%, 78% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
+@keyframes loader-check { 0%, 22% { stroke-dashoffset: 1; } 52%, 78% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
+.loader-word {
+  font: 600 22px/1 'Source Serif Four', serif; letter-spacing: 0.01em;
+  /* A soft light sweeping across the name. */
+  background: linear-gradient(100deg, var(--text-tertiary) 35%, var(--text) 50%, var(--text-tertiary) 65%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: loader-shine 2.2s linear infinite;
+}
+@keyframes loader-shine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+.loader-note { margin: 4px 0 0; max-width: 280px; font: 400 12.5px/1.45 'Public Sans', sans-serif; color: var(--text-tertiary); }
+.loader-btn {
+  margin-top: 8px; min-height: 44px; padding: 0 22px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font: 600 14px/1 'Public Sans', sans-serif; cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader-ring, .loader-check { animation: none; stroke-dashoffset: 0; }
+  .loader-word { animation: none; }
+}
+
+/* Shown by ErrorBoundary if a screen crashes. Lives here, not in a screen's
+   own stylesheet, so it still works when the screen that broke is one of those. */
+.crash-screen {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+}
+.crash-screen h1 { margin: 0; font: 700 20px/1.2 'Public Sans', sans-serif; }
+.crash-screen p { margin: 0; max-width: 320px; color: var(--text-secondary); font: 400 14px/1.5 'Public Sans', sans-serif; }
+.crash-btn {
+  margin-top: 8px; min-height: 48px; padding: 0 28px;
+  border: none; border-radius: 10px; cursor: pointer;
+  background: var(--btn-bg); color: var(--btn-fg);
+  font: 600 15px/1 'Public Sans', sans-serif;
+}
+
+:root {
+  --bg: oklch(9% 0.004 260);
+  --surface: oklch(15% 0.006 260);
+  --border: oklch(24% 0.008 260);
+  --text: oklch(97% 0.002 260);
+  --text-secondary: oklch(70% 0.006 260);
+  --text-tertiary: oklch(55% 0.006 260);
+  --accent: oklch(72% 0.1 262);
+  --chip-bg: oklch(20% 0.008 260);
+  --chip-text: oklch(92% 0.004 260);
+  --btn-bg: oklch(97% 0.002 260);
+  --btn-fg: oklch(9% 0.004 260);
+
+  --supported-bg: oklch(30% 0.09 150);
+  --supported-fg: oklch(88% 0.14 150);
+  --mixed-bg: oklch(30% 0.09 80);
+  --mixed-fg: oklch(88% 0.14 80);
+  --unsupported-bg: oklch(30% 0.1 25);
+  --unsupported-fg: oklch(88% 0.15 25);
+  --unable-bg: oklch(26% 0.006 260);
+  --unable-fg: oklch(85% 0.006 260);
+}

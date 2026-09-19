@@ -1,0 +1,95 @@
+/* The app's own stylesheets first (copied from frontend/src, so the mock
+   screens look exactly like the real ones), then the video-only styles. */
+@import './app-css/index.css';
+@import './app-css/App.css';
+@import './app-css/AuthScreen.css';
+@import './app-css/UploadScreen.css';
+@import './app-css/MyPostsScreen.css';
+@import './app-css/InterestsScreen.css';
+@import './app-css/FeedScreen.css';
+
+/* ---------- the canvas ---------- */
+.promo-root {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Public Sans', system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ---------- captions above the phone ---------- */
+.promo-caption { position: absolute; left: 72px; right: 72px; top: 66px; z-index: 5; }
+.promo-eyebrow {
+  margin-bottom: 18px;
+  font: 700 24px/1 'Public Sans', sans-serif; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--accent);
+}
+.promo-headline {
+  margin: 0; font: 600 68px/1.08 'Source Serif Four', serif; letter-spacing: -0.012em;
+  color: var(--text); text-wrap: balance;
+}
+.promo-sub { margin-top: 18px; max-width: 940px; font: 400 30px/1.35 'Public Sans', sans-serif; color: var(--text-secondary); text-wrap: balance; }
+.hl { color: var(--accent); }
+.hl-bad { color: var(--unsupported-fg); }
+
+/* The four little steps under "AI agents check it first". */
+.promo-steps { display: flex; gap: 12px; margin-top: 4px; }
+.promo-step {
+  display: flex; align-items: center; gap: 9px; padding: 11px 18px; border-radius: 999px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  font: 600 27px/1 'Public Sans', sans-serif; color: var(--text-tertiary); white-space: nowrap;
+}
+.promo-step.active { border-color: var(--accent); color: var(--text); }
+.promo-step.done { border-color: transparent; background: var(--supported-bg); color: var(--supported-fg); }
+
+/* ---------- the phone ---------- */
+.promo-stage {
+  position: absolute; left: 0; right: 0; top: 350px; bottom: 0; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 90px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 90px);
+}
+.promo-phone {
+  position: absolute; left: 50%; top: 70px; width: 384px; padding: 10px; border-radius: 56px;
+  background: oklch(12% 0.004 260); border: 2px solid oklch(31% 0.01 260);
+  box-shadow: 0 0 0 1px oklch(6% 0 0), 0 60px 140px rgba(0, 0, 0, 0.65), 0 0 140px oklch(50% 0.12 262 / 0.2);
+  transform-origin: 50% 0;
+}
+.promo-phone-screen { position: relative; width: 360px; height: 780px; border-radius: 46px; overflow: hidden; background: var(--bg); }
+
+/* The app is sized to the browser window; here it is a fixed 360 x 780 screen. */
+.phone-frame.promo-screen { width: 360px; max-width: none; height: 780px; }
+/* Remotion draws each frame on its own, so nothing may animate by itself. */
+.promo-screen *, .promo-screen *::before, .promo-screen *::after { animation: none !important; transition: none !important; }
+.promo-select { display: flex; align-items: center; justify-content: space-between; }
+.promo-screen .feed-toast { white-space: nowrap; }
+.promo-screen .feed-scroll { overflow: hidden; }
+.promo-screen .panel-padding, .promo-screen .profile-scroll { overflow: hidden; }
+.promo-screen .sheet-list { overflow: hidden; }
+
+/* ---------- full-screen scenes ---------- */
+.promo-hook { margin: 0; font: 600 112px/1.04 'Source Serif Four', serif; letter-spacing: -0.02em; color: var(--text); text-wrap: balance; }
+.promo-hook-sub { margin: 34px 0 0; font: 500 46px/1.25 'Public Sans', sans-serif; color: var(--text-secondary); }
+
+.promo-badge {
+  display: inline-flex; align-items: center; padding: 18px 34px; border-radius: 999px;
+  font: 700 36px/1 'Public Sans', sans-serif;
+}
+
+.promo-card {
+  position: relative; display: flex; gap: 26px; align-items: flex-start; padding: 24px 30px;
+  border: 1.5px solid var(--border); border-radius: 28px; background: var(--surface);
+}
+.promo-card-num {
+  flex: none; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--chip-bg); border: 1.5px solid var(--accent); color: var(--accent);
+  font: 700 28px/1 'Source Serif Four', serif;
+}
+.promo-card h3 { margin: 0 0 6px; font: 600 38px/1.15 'Source Serif Four', serif; color: var(--text); }
+.promo-card p { margin: 0; font: 400 27px/1.38 'Public Sans', sans-serif; color: var(--text-secondary); }
+.promo-rule {
+  display: inline-flex; padding: 9px 17px; border-radius: 999px; margin: 12px 10px 0 0;
+  font: 700 23px/1 'Public Sans', sans-serif;
+}
+.promo-chip {
+  display: inline-flex; padding: 11px 21px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface);
+  font: 600 26px/1 'Public Sans', sans-serif; color: var(--chip-text);
+}
