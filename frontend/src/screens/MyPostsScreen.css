@@ -36,6 +36,11 @@
 .profile-name svg { flex: none; opacity: 0.55; }
 .profile-name.unset { font: 600 14px/1.2 'Public Sans', sans-serif; color: var(--accent); }
 .profile-stats { display: flex; gap: 24px; }
+/* Your own stats get a full-width row: four of them won't fit beside the photo. */
+.profile-stats-row {
+  display: flex; justify-content: space-around; padding: 12px 0;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
 .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .stat strong { font: 700 18px/1 'Source Serif 4', serif; color: var(--text); }
 .stat span { font: 500 11.5px/1 'Public Sans', sans-serif; color: var(--text-tertiary); }

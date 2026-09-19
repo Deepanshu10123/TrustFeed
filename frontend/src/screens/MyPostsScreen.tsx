@@ -77,6 +77,8 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
   const { session } = useAuth()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [username, setUsernameValue] = useState<string | null>(null)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
   const [editingUsername, setEditingUsername] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
@@ -98,6 +100,8 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
       .then((p) => {
         setAvatarUrl(p.avatar_url)
         setUsernameValue(p.username)
+        setFollowerCount(p.follower_count)
+        setFollowingCount(p.following_count)
       })
       .catch(() => {}) // no profile row yet just means no avatar or username set -- not worth surfacing as an error
   }, [])
@@ -182,16 +186,25 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
                 <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
               </svg>
             </button>
-            <div className="profile-stats">
-              <div className="stat">
-                <strong>{posts.length}</strong>
-                <span>Posts</span>
-              </div>
-              <div className="stat">
-                <strong>{publishedCount}</strong>
-                <span>Published</span>
-              </div>
-            </div>
+          </div>
+        </div>
+
+        <div className="profile-stats-row">
+          <div className="stat">
+            <strong>{posts.length}</strong>
+            <span>Posts</span>
+          </div>
+          <div className="stat">
+            <strong>{publishedCount}</strong>
+            <span>Published</span>
+          </div>
+          <div className="stat">
+            <strong>{followerCount}</strong>
+            <span>Followers</span>
+          </div>
+          <div className="stat">
+            <strong>{followingCount}</strong>
+            <span>Following</span>
           </div>
         </div>
 

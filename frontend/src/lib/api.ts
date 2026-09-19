@@ -107,7 +107,12 @@ export async function deletePost(postId: string): Promise<{ deleted: string }> {
   return request(`/posts/${postId}`, { method: 'DELETE' })
 }
 
-export async function getProfile(): Promise<{ avatar_url: string | null; username: string | null }> {
+export async function getProfile(): Promise<{
+  avatar_url: string | null
+  username: string | null
+  follower_count: number
+  following_count: number
+}> {
   return request('/profile')
 }
 

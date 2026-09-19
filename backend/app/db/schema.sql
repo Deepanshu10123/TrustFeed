@@ -128,3 +128,26 @@ create table follows (
 );
 create index follows_followee_idx on follows (followee_id);
 alter table follows enable row level security;
+
+-- "Is anyone using it?" Handy to run by hand in the SQL editor whenever you're
+-- curious (these are questions, not part of the migration). Vercel's Analytics
+-- counts visits; this is what people actually did.
+--
+--   the big picture:
+--     select
+--       (select count(*) from auth.users)                                                        as people,
+--       (select count(*) from auth.users where created_at > now() - interval '7 days')           as new_people_this_week,
+--       (select count(*) from posts where status = 'published')                                  as published_posts,
+--       (select count(*) from posts where created_at > now() - interval '7 days')                as posts_this_week,
+--       (select count(distinct user_id) from posts where created_at > now() - interval '7 days') as people_who_posted_this_week,
+--       (select count(*) from likes)                                                             as likes,
+--       (select count(*) from comments)                                                          as comments,
+--       (select count(*) from follows)                                                           as follows;
+--
+--   posts per day, last two weeks:
+--     select created_at::date as day, count(*) as posts
+--     from posts where created_at > now() - interval '14 days'
+--     group by 1 order by 1 desc;
+--
+--   how posts ended up (how often the checker publishes, rejects or fails):
+--     select status, count(*) from posts group by status order by count(*) desc;

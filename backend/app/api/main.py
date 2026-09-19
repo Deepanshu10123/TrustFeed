@@ -230,20 +230,28 @@ def _is_following(follower_id: str, followee_id: str) -> bool:
     return bool(rows)
 
 
-async def _follow_stats(user_id: str, viewer_id: str) -> dict:
-    """A person's follower and following counts, and whether the viewer
-    follows them. An add-on to the profile: if it can't be worked out (say the
-    follows SQL hasn't been run yet) the profile still loads without it."""
+async def _follow_stats(user_id: str, viewer_id: str | None = None) -> dict:
+    """A person's follower and following counts and, when someone else is
+    looking, whether that viewer follows them. An add-on to the profile: if it
+    can't be worked out (say the follows SQL hasn't been run yet) the profile
+    still loads without it."""
+    lookups = [
+        asyncio.to_thread(_count_follows, "followee_id", user_id),
+        asyncio.to_thread(_count_follows, "follower_id", user_id),
+    ]
+    ask_if_following = viewer_id is not None and viewer_id != user_id
+    if ask_if_following:
+        lookups.append(asyncio.to_thread(_is_following, viewer_id, user_id))
     try:
-        followers, following, is_following = await asyncio.gather(
-            asyncio.to_thread(_count_follows, "followee_id", user_id),
-            asyncio.to_thread(_count_follows, "follower_id", user_id),
-            asyncio.to_thread(_is_following, viewer_id, user_id),
-        )
+        results = await asyncio.gather(*lookups)
     except Exception as e:
         print(f"[follows] couldn't load follow stats, carrying on without them: {e}", flush=True)
         return {"follower_count": 0, "following_count": 0, "is_following": False}
-    return {"follower_count": followers, "following_count": following, "is_following": is_following}
+    return {
+        "follower_count": results[0],
+        "following_count": results[1],
+        "is_following": results[2] if ask_if_following else False,
+    }
 
 
 # The frontend (Vite dev server locally, a deployed Vercel origin in
@@ -532,11 +540,19 @@ async def set_interests(body: InterestsBody, user=Depends(get_current_user)):
 
 @app.get("/profile")
 async def get_profile(user=Depends(get_current_user)):
-    result = (
-        get_supabase_client().table("user_preferences").select("avatar_url,username").eq("user_id", user.id).execute()
-    )
-    profile = result.data[0] if result.data else {}
-    return {"avatar_url": profile.get("avatar_url"), "username": profile.get("username")}
+    def read_profile() -> list[dict]:
+        return (
+            get_supabase_client().table("user_preferences").select("avatar_url,username").eq("user_id", user.id).execute().data
+        )
+
+    rows, stats = await asyncio.gather(asyncio.to_thread(read_profile), _follow_stats(user.id))
+    profile = rows[0] if rows else {}
+    return {
+        "avatar_url": profile.get("avatar_url"),
+        "username": profile.get("username"),
+        "follower_count": stats["follower_count"],
+        "following_count": stats["following_count"],
+    }
 
 
 class UsernameBody(BaseModel):
