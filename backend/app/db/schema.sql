@@ -114,3 +114,17 @@ alter table posts add column queued_at timestamptz not null default now();
 alter table user_preferences
   add column username text unique
   check (username ~ '^[a-z0-9_]{3,20}$');
+
+-- Follows: one row per (follower, person followed). The composite primary key
+-- means following someone twice is the same as once, and the check stops
+-- anyone following themselves. The index makes "who follows this person" (a
+-- follower count) as quick as "who does this person follow".
+create table follows (
+  follower_id uuid not null references auth.users(id) on delete cascade,
+  followee_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (follower_id, followee_id),
+  check (follower_id <> followee_id)
+);
+create index follows_followee_idx on follows (followee_id);
+alter table follows enable row level security;

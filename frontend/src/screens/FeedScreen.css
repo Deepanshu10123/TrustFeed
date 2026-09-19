@@ -12,6 +12,18 @@
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
+/* "For you | Following", floating over the top of the feed. */
+.feed-tabs {
+  position: absolute; top: 22px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; gap: 20px;
+}
+.feed-tabs button {
+  padding: 4px 1px; border: none; border-bottom: 2px solid transparent; background: none; cursor: pointer;
+  font: 600 14px/1 'Public Sans', sans-serif; color: rgba(255, 255, 255, 0.62);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+.feed-tabs button.active { color: #fff; border-bottom-color: #fff; }
+
 /* The card after the last post: loading more, a button if that failed, or
    the end of the feed. */
 .feed-end { flex-direction: column; gap: 6px; background: var(--bg); }
@@ -127,7 +139,7 @@ button.badge { cursor: pointer; }
   color: oklch(88% 0.004 260 / 0.9);
 }
 .feed-status {
-  padding: 40px 24px; text-align: center;
+  padding: 76px 24px 40px; text-align: center;
   color: var(--text-secondary);
   font: 400 14px/1.5 'Public Sans', sans-serif;
 }
@@ -147,6 +159,13 @@ button.badge { cursor: pointer; }
 .sheet.tall { height: 90%; }
 .user-handle { font: 700 17px/1.2 'Source Serif 4', serif; color: var(--text); overflow-wrap: anywhere; }
 .profile-avatar.static { cursor: default; }
+.follow-btn {
+  align-self: flex-start; min-height: 38px; padding: 9px 22px; border-radius: 10px;
+  border: 1px solid transparent; background: var(--btn-bg); color: var(--btn-fg);
+  font: 600 14px/1 'Public Sans', sans-serif; cursor: pointer;
+}
+.follow-btn.following { background: transparent; border-color: var(--border); color: var(--text); }
+.follow-error { margin-top: -8px; font: 500 13px/1.4 'Public Sans', sans-serif; color: var(--unsupported-fg); }
 .sheet-header {
   flex: none; display: flex; align-items: center; justify-content: space-between;
   padding: 16px 18px; border-bottom: 1px solid var(--border);

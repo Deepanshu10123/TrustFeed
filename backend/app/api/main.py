@@ -199,6 +199,53 @@ def _published_count(user_id: str) -> int:
     return result.count or 0
 
 
+MAX_FOLLOWING = 200  # keeps the Following feed's lookup a sensible size
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _count_follows(column: str, user_id: str) -> int:
+    """How many follow rows have this person in `column` -- "followee_id"
+    counts their followers, "follower_id" counts who they follow."""
+    result = get_supabase_client().table("follows").select(column, count="exact", head=True).eq(column, user_id).execute()
+    return result.count or 0
+
+
+def _is_following(follower_id: str, followee_id: str) -> bool:
+    rows = (
+        get_supabase_client()
+        .table("follows")
+        .select("followee_id")
+        .eq("follower_id", follower_id)
+        .eq("followee_id", followee_id)
+        .execute()
+        .data
+    )
+    return bool(rows)
+
+
+async def _follow_stats(user_id: str, viewer_id: str) -> dict:
+    """A person's follower and following counts, and whether the viewer
+    follows them. An add-on to the profile: if it can't be worked out (say the
+    follows SQL hasn't been run yet) the profile still loads without it."""
+    try:
+        followers, following, is_following = await asyncio.gather(
+            asyncio.to_thread(_count_follows, "followee_id", user_id),
+            asyncio.to_thread(_count_follows, "follower_id", user_id),
+            asyncio.to_thread(_is_following, viewer_id, user_id),
+        )
+    except Exception as e:
+        print(f"[follows] couldn't load follow stats, carrying on without them: {e}", flush=True)
+        return {"follower_count": 0, "following_count": 0, "is_following": False}
+    return {"follower_count": followers, "following_count": following, "is_following": is_following}
+
+
 # The frontend (Vite dev server locally, a deployed Vercel origin in
 # production) runs on a different origin than this API, so the browser
 # needs explicit permission to call it -- see get_allowed_origins().
@@ -540,13 +587,15 @@ async def upload_avatar(avatar: UploadFile, user=Depends(get_current_user)):
 
 
 @app.get("/feed")
-async def get_feed(before: str | None = None, user=Depends(get_current_user)):
+async def get_feed(before: str | None = None, following: bool = False, user=Depends(get_current_user)):
     """One page of published posts from every user -- the shared feed, not
     just your own -- newest first. `before` is the next_cursor from the
     previous page: only posts older than that come back.
     Filtered to the caller's chosen interests once they've set any; an
     empty/unset preference list means "show everything", not "show
-    nothing", so a brand-new user isn't met with an empty feed."""
+    nothing", so a brand-new user isn't met with an empty feed.
+    With following=true it's only posts from people the caller follows --
+    everything they've posted, whatever the caller's interests."""
     if before is not None:
         try:
             datetime.fromisoformat(before)
@@ -556,13 +605,23 @@ async def get_feed(before: str | None = None, user=Depends(get_current_user)):
     supabase = get_supabase_client()
     page_size = get_feed_page_size()
 
-    prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
-    topics = prefs.data[0]["topics"] if prefs.data else []
+    topics: list[str] = []
+    followee_ids: list[str] = []
+    if following:
+        rows = supabase.table("follows").select("followee_id").eq("follower_id", user.id).limit(MAX_FOLLOWING).execute().data
+        followee_ids = [row["followee_id"] for row in rows]
+        if not followee_ids:
+            return {"posts": [], "next_cursor": None}
+    else:
+        prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
+        topics = prefs.data[0]["topics"] if prefs.data else []
 
     query = supabase.table("posts").select("*").eq("status", "published")
     if before:
         query = query.lt("created_at", before)
-    if topics:
+    if following:
+        query = query.in_("user_id", followee_ids)
+    elif topics:
         query = query.in_("declared_topic", topics)
     posts = query.order("created_at", desc=True).limit(page_size).execute().data
     if not posts:
@@ -605,10 +664,11 @@ async def get_user_profile(user_id: str, user=Depends(get_current_user)):
     except ValueError:
         raise unavailable
 
-    posts, post_count, profiles = await asyncio.gather(
+    posts, post_count, profiles, follow_stats = await asyncio.gather(
         asyncio.to_thread(_published_posts, user_id),
         asyncio.to_thread(_published_count, user_id),
         _optional("profiles", {}, _profiles, [user_id]),
+        _follow_stats(user_id, user.id),
     )
     profile = profiles.get(user_id, {})
     if not posts and not profile:
@@ -619,8 +679,37 @@ async def get_user_profile(user_id: str, user=Depends(get_current_user)):
         "username": profile.get("username"),
         "avatar_url": profile.get("avatar_url"),
         "post_count": post_count,
+        **follow_stats,
         "posts": posts,
     }
+
+
+@app.put("/users/{user_id}/follow")
+async def follow_user(user_id: str, user=Depends(get_current_user)):
+    if not _is_uuid(user_id):
+        raise HTTPException(status_code=404, detail="That profile isn't available.")
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="You can't follow yourself.")
+    # Already following is fine (a repeat is a no-op) even at the limit.
+    if _count_follows("follower_id", user.id) >= MAX_FOLLOWING and not _is_following(user.id, user_id):
+        raise HTTPException(status_code=400, detail=f"You can follow up to {MAX_FOLLOWING} people.")
+    try:
+        get_supabase_client().table("follows").upsert(
+            {"follower_id": user.id, "followee_id": user_id}, on_conflict="follower_id,followee_id", ignore_duplicates=True
+        ).execute()
+    except APIError as e:
+        if e.code == "23503":  # foreign key: there's nobody with that id
+            raise HTTPException(status_code=404, detail="That profile isn't available.") from e
+        raise
+    return {"following": True, "follower_count": _count_follows("followee_id", user_id)}
+
+
+@app.delete("/users/{user_id}/follow")
+async def unfollow_user(user_id: str, user=Depends(get_current_user)):
+    if not _is_uuid(user_id):
+        raise HTTPException(status_code=404, detail="That profile isn't available.")
+    get_supabase_client().table("follows").delete().eq("follower_id", user.id).eq("followee_id", user_id).execute()
+    return {"following": False, "follower_count": _count_follows("followee_id", user_id)}
 
 
 REPORT_REASONS = {"misleading", "hateful", "dangerous", "spam", "other"}

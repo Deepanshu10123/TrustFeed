@@ -13,22 +13,39 @@ import './FeedScreen.css'
 // A page can come back empty while there's still more to see -- when every
 // post on it is one you've reported -- so keep going until something shows or
 // there's nothing left.
-async function fetchNonEmptyPage(before?: string): Promise<FeedPage> {
-  let page = await getFeed(before)
-  while (page.posts.length === 0 && page.next_cursor) page = await getFeed(page.next_cursor)
+async function fetchNonEmptyPage(before?: string, following = false): Promise<FeedPage> {
+  let page = await getFeed(before, following)
+  while (page.posts.length === 0 && page.next_cursor) page = await getFeed(page.next_cursor, following)
   return page
 }
 
 // What the feed opens with: the first page, and -- if someone opened a shared
 // link -- that post put on top of it. A link to something that's gone (deleted,
 // hidden after reports) just means the normal feed.
-async function fetchFirstScreen(sharedPostId: string | null) {
+async function fetchFirstScreen(sharedPostId: string | null, following: boolean) {
   const [page, shared] = await Promise.all([
-    fetchNonEmptyPage(),
+    fetchNonEmptyPage(undefined, following),
     sharedPostId ? getSharedPost(sharedPostId).catch(() => null) : Promise.resolve(null),
   ])
   const posts = shared ? [shared, ...page.posts.filter((p) => p.id !== shared.id)] : page.posts
   return { posts, nextCursor: page.next_cursor, sharedMissing: sharedPostId !== null && shared === null }
+}
+
+type FeedMode = 'all' | 'following'
+
+/** "For you" (everyone, filtered by your interests) or "Following" (only the
+ * people you follow), floating over the top of the feed. */
+function FeedTabs({ mode, onChange }: { mode: FeedMode; onChange: (mode: FeedMode) => void }) {
+  return (
+    <div className="feed-tabs" role="tablist">
+      <button className={mode === 'all' ? 'active' : ''} role="tab" aria-selected={mode === 'all'} type="button" onClick={() => onChange('all')}>
+        For you
+      </button>
+      <button className={mode === 'following' ? 'active' : ''} role="tab" aria-selected={mode === 'following'} type="button" onClick={() => onChange('following')}>
+        Following
+      </button>
+    </div>
+  )
 }
 
 // A stable-but-varied background per post -- shown behind the real
@@ -246,18 +263,34 @@ export function FeedScreen({
   const loadingMoreRef = useRef(false)
   const loadMoreRef = useRef<() => void>(() => {})
 
-  // Runs once, when the feed opens -- `sharedPostId` is only ever the link the
-  // app was opened with, and it's cleared as soon as it's been used.
+  const [mode, setMode] = useState<FeedMode>('all')
+  const modeRef = useRef(mode)
   useEffect(() => {
-    fetchFirstScreen(sharedPostId)
+    modeRef.current = mode
+  })
+
+  // Loads the first screen when the feed opens, and again each time you switch
+  // between "For you" and "Following". `sharedPostId` is only ever the link the
+  // app was opened with (cleared as soon as it's been used) and only applies
+  // to "For you".
+  useEffect(() => {
+    let cancelled = false
+    const sharedForThisFeed = mode === 'all' ? sharedPostId : null
+    fetchFirstScreen(sharedForThisFeed, mode === 'following')
       .then(({ posts, nextCursor, sharedMissing }) => {
+        if (cancelled) return
         setPosts(posts)
         setCursor(nextCursor)
-        if (sharedPostId) onSharedHandled()
+        if (sharedForThisFeed) onSharedHandled()
         if (sharedMissing) showToast("That post isn't available any more.")
       })
-      .catch((e) => setError(e.message))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      .catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (posts !== null || error) return
@@ -300,6 +333,19 @@ export function FeedScreen({
     showToast("Thanks for reporting. It's off your feed now.")
   }
 
+  function changeMode(next: FeedMode) {
+    if (next === mode) return
+    setMode(next)
+    // Start the other feed again from the top.
+    setPosts(null)
+    setCursor(null)
+    setError(null)
+    setSlow(false)
+    setLoadFailed(false)
+    setActiveIndex(0)
+    setExpandedId(null)
+  }
+
   function scrollToSlide(index: number) {
     scrollRef.current?.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: 'start' })
   }
@@ -326,8 +372,10 @@ export function FeedScreen({
   async function loadMore() {
     if (!cursor || loadingMoreRef.current) return
     loadingMoreRef.current = true
+    const startedIn = mode
     try {
-      const page = await fetchNonEmptyPage(cursor)
+      const page = await fetchNonEmptyPage(cursor, mode === 'following')
+      if (modeRef.current !== startedIn) return // you switched feeds while this was loading
       setPosts((prev) => {
         const seen = new Set((prev ?? []).map((p) => p.id))
         return [...(prev ?? []), ...page.posts.filter((p) => !seen.has(p.id))]
@@ -407,12 +455,36 @@ export function FeedScreen({
     }
   }
 
-  if (error) return <div className="feed-status">Couldn't load the feed: {error}</div>
-  if (posts === null) return <FeedSkeleton slow={slow} />
-  if (posts.length === 0) return <div className="feed-status">No published posts yet. Be the first to upload one.</div>
+  const tabs = <FeedTabs mode={mode} onChange={changeMode} />
+  if (error)
+    return (
+      <>
+        {tabs}
+        <div className="feed-status">Couldn't load the feed: {error}</div>
+      </>
+    )
+  if (posts === null)
+    return (
+      <>
+        {tabs}
+        <FeedSkeleton slow={slow} />
+      </>
+    )
+  if (posts.length === 0)
+    return (
+      <>
+        {tabs}
+        <div className="feed-status">
+          {mode === 'following'
+            ? "Nothing here yet. Tap someone's name on a post and follow them, and their posts will show up here."
+            : 'No published posts yet. Be the first to upload one.'}
+        </div>
+      </>
+    )
 
   return (
     <>
+    {tabs}
     <div className="feed-scroll" ref={scrollRef}>
       {posts.map((post, index) => {
         const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])

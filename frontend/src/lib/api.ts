@@ -130,12 +130,26 @@ export interface FeedPage {
   next_cursor: string | null // pass to getFeed() for the next page; null once there's nothing older
 }
 
-export async function getFeed(before?: string): Promise<FeedPage> {
-  return request(before ? `/feed?before=${encodeURIComponent(before)}` : '/feed')
+/** A page of the feed -- everyone's posts, or with `following` only people
+ * you follow. Pass the previous page's next_cursor as `before` for the next. */
+export async function getFeed(before?: string, following = false): Promise<FeedPage> {
+  const params = new URLSearchParams()
+  if (before) params.set('before', before)
+  if (following) params.set('following', 'true')
+  const query = params.toString()
+  return request(query ? `/feed?${query}` : '/feed')
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile> {
   return request(`/users/${userId}`)
+}
+
+export async function followUser(userId: string): Promise<{ following: boolean; follower_count: number }> {
+  return request(`/users/${userId}/follow`, { method: 'PUT' })
+}
+
+export async function unfollowUser(userId: string): Promise<{ following: boolean; follower_count: number }> {
+  return request(`/users/${userId}/follow`, { method: 'DELETE' })
 }
 
 /** One published post, for someone opening a shared link. */

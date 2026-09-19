@@ -63,5 +63,8 @@ export interface UserProfile {
   username: string | null
   avatar_url: string | null
   post_count: number
+  follower_count: number
+  following_count: number
+  is_following: boolean // whether the person looking follows them
   posts: Post[]
 }
