@@ -1,4 +1,17 @@
-import type { Post, Verdict } from './types'
+import type { Post, Verdict, VerdictLabel } from './types'
+
+const BADGE_CLASS: Record<VerdictLabel, string> = {
+  'Well Supported': 'supported',
+  'Mixed Evidence': 'mixed',
+  'Unsupported': 'unsupported',
+  'Unable to Verify': 'unable',
+}
+
+/** The CSS class that colors a verdict badge. A post with no factual
+ * claims (no label) gets the neutral one. */
+export function badgeClassFor(label: VerdictLabel | undefined): string {
+  return label ? BADGE_CLASS[label] : 'unable'
+}
 
 export function timeAgo(iso: string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)

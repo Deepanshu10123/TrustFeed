@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { addComment, deleteComment, getComments, getFeed, likePost, unlikePost } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
-import { captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
+import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
+import { EvidenceSheet } from './EvidenceSheet'
 import './FeedScreen.css'
-
-const BADGE_CLASS: Record<string, string> = {
-  'Well Supported': 'supported',
-  'Mixed Evidence': 'mixed',
-  'Unsupported': 'unsupported',
-  'Unable to Verify': 'unable',
-}
 
 // A stable-but-varied background per post -- shown behind the real
 // <video> while it loads, and as the only background for text posts.
@@ -124,15 +118,15 @@ function CommentsSheet({
   const canModerateAll = currentUserId === post.user_id
 
   return (
-    <div className="comments-overlay" onClick={onClose}>
-      <div className="comments-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="comments-header">
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-header">
           <span>Comments</span>
-          <button className="comments-close" onClick={onClose} type="button" aria-label="Close">
+          <button className="sheet-close" onClick={onClose} type="button" aria-label="Close">
             &times;
           </button>
         </div>
-        <div className="comments-list">
+        <div className="sheet-list">
           {error && <div className="comment-empty">{error}</div>}
           {comments === null && !error && <div className="comment-empty">Loading...</div>}
           {comments?.length === 0 && <div className="comment-empty">No comments yet -- say something.</div>}
@@ -181,6 +175,7 @@ export function FeedScreen() {
   // short-form feed already behaves.
   const [muted, setMuted] = useState(true)
   const [commentsPost, setCommentsPost] = useState<Post | null>(null)
+  const [evidencePost, setEvidencePost] = useState<Post | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [pausedIds, setPausedIds] = useState<Set<string>>(() => new Set())
   // Only one caption is open at a time -- opening another closes this one.
@@ -267,7 +262,7 @@ export function FeedScreen() {
     <div className="feed-scroll">
       {posts.map((post) => {
         const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])
-        const badgeClass = verdict ? BADGE_CLASS[verdict.label] : 'unable'
+        const badgeClass = badgeClassFor(verdict?.label)
         // What the collapsed caption shows: the video's transcript, or for a
         // text post (whose text is already the big quote) the verdict's
         // explanation. Opening it reveals everything.
@@ -348,7 +343,15 @@ export function FeedScreen() {
               </div>
               <div className="tag-row">
                 <span className="topic-chip">{post.declared_topic}</span>
-                <span className={`badge ${badgeClass}`}>{verdict?.label ?? 'No factual claims'}</span>
+                <button
+                  className={`badge ${badgeClass}`}
+                  type="button"
+                  aria-label="See how this was checked"
+                  onClick={() => setEvidencePost(post)}
+                >
+                  {verdict?.label ?? 'No factual claims'}
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
               </div>
               {expanded ? (
                 <div className="post-text">
@@ -374,6 +377,7 @@ export function FeedScreen() {
     {commentsPost && (
       <CommentsSheet post={commentsPost} currentUserId={session?.user.id} onClose={() => setCommentsPost(null)} />
     )}
+    {evidencePost && <EvidenceSheet post={evidencePost} onClose={() => setEvidencePost(null)} />}
     {toast && <div className="feed-toast">{toast}</div>}
     </>
   )
