@@ -138,6 +138,36 @@ def _profiles(user_ids: list[str]) -> dict[str, dict]:
     )
     return {row["user_id"]: row for row in rows}
 
+
+async def _decorate_posts(posts: list[dict], user_id: str) -> set[str]:
+    """Adds what the app needs to show each post -- a playable video link,
+    like count and whether this viewer liked it, the uploader's picture and
+    username -- and returns the ids of any the viewer has reported.
+
+    The lookups only need the posts themselves, not each other, so they run
+    at once instead of one after another: each is a full round trip to a
+    database on the other side of the world."""
+    post_ids = [p["id"] for p in posts]
+    user_ids = list({p["user_id"] for p in posts})
+
+    like_info, profiles, reported, _ = await asyncio.gather(
+        _optional("likes", {}, _like_info, post_ids, user_id),
+        # Names and pictures are an add-on too: until the username SQL has
+        # been run this lookup fails, and the feed should still load.
+        _optional("profiles", {}, _profiles, user_ids),
+        _optional("reports", set(), _reported_by, post_ids, user_id),
+        asyncio.to_thread(_attach_video_urls, posts),
+    )
+    for post in posts:
+        info = like_info.get(post["id"], {})
+        post["like_count"] = info.get("like_count", 0)
+        post["liked_by_me"] = info.get("liked_by_me", False)
+        profile = profiles.get(post["user_id"], {})
+        post["uploader_avatar_url"] = profile.get("avatar_url")
+        post["uploader_username"] = profile.get("username")
+    return reported
+
+
 # The frontend (Vite dev server locally, a deployed Vercel origin in
 # production) runs on a different origin than this API, so the browser
 # needs explicit permission to call it -- see get_allowed_origins().
@@ -511,30 +541,26 @@ async def get_feed(before: str | None = None, user=Depends(get_current_user)):
     # posts you've reported can't be mistaken for the end of the feed.
     next_cursor = posts[-1]["created_at"] if len(posts) == page_size else None
 
-    # The lookups below only need the posts just fetched, not each other --
-    # run them at once instead of one after another, since each is a full
-    # round trip to a database on the other side of the world.
-    post_ids = [p["id"] for p in posts]
-    user_ids = list({p["user_id"] for p in posts})
-
-    like_info, profiles, reported, _ = await asyncio.gather(
-        _optional("likes", {}, _like_info, post_ids, user.id),
-        # Names and pictures are an add-on too: until the username SQL has
-        # been run this lookup fails, and the feed should still load.
-        _optional("profiles", {}, _profiles, user_ids),
-        _optional("reports", set(), _reported_by, post_ids, user.id),
-        asyncio.to_thread(_attach_video_urls, posts),
-    )
+    reported = await _decorate_posts(posts, user.id)
     # A post you've reported stays out of your feed, not just until you refresh.
     posts = [p for p in posts if p["id"] not in reported]
-    for post in posts:
-        info = like_info.get(post["id"], {})
-        post["like_count"] = info.get("like_count", 0)
-        post["liked_by_me"] = info.get("liked_by_me", False)
-        profile = profiles.get(post["user_id"], {})
-        post["uploader_avatar_url"] = profile.get("avatar_url")
-        post["uploader_username"] = profile.get("username")
     return {"posts": posts, "next_cursor": next_cursor}
+
+
+@app.get("/feed/{post_id}")
+async def get_shared_post(post_id: str, user=Depends(get_current_user)):
+    """One published post, for a link someone shared: any signed-in person can
+    open it, not just its owner (unlike /posts/{post_id})."""
+    unavailable = HTTPException(status_code=404, detail="That post isn't available any more.")
+    try:
+        uuid.UUID(post_id)
+    except ValueError:
+        raise unavailable
+    rows = get_supabase_client().table("posts").select("*").eq("id", post_id).eq("status", "published").execute().data
+    if not rows:
+        raise unavailable
+    await _decorate_posts(rows, user.id)
+    return rows[0]
 
 
 REPORT_REASONS = {"misleading", "hateful", "dangerous", "spam", "other"}

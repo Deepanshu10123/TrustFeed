@@ -134,6 +134,11 @@ export async function getFeed(before?: string): Promise<FeedPage> {
   return request(before ? `/feed?before=${encodeURIComponent(before)}` : '/feed')
 }
 
+/** One published post, for someone opening a shared link. */
+export async function getSharedPost(postId: string): Promise<Post> {
+  return request(`/feed/${postId}`)
+}
+
 export interface PostStatusRow {
   id: string
   kind: PostKind

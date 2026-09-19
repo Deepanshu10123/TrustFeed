@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { addComment, deleteComment, getComments, getFeed, likePost, unlikePost, type FeedPage } from '../lib/api'
+import { addComment, deleteComment, getComments, getFeed, getSharedPost, likePost, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
+import { shareUrlFor } from '../lib/shareLink'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import { EvidenceSheet } from './EvidenceSheet'
 import { ReportSheet } from './ReportSheet'
@@ -15,6 +16,18 @@ async function fetchNonEmptyPage(before?: string): Promise<FeedPage> {
   let page = await getFeed(before)
   while (page.posts.length === 0 && page.next_cursor) page = await getFeed(page.next_cursor)
   return page
+}
+
+// What the feed opens with: the first page, and -- if someone opened a shared
+// link -- that post put on top of it. A link to something that's gone (deleted,
+// hidden after reports) just means the normal feed.
+async function fetchFirstScreen(sharedPostId: string | null) {
+  const [page, shared] = await Promise.all([
+    fetchNonEmptyPage(),
+    sharedPostId ? getSharedPost(sharedPostId).catch(() => null) : Promise.resolve(null),
+  ])
+  const posts = shared ? [shared, ...page.posts.filter((p) => p.id !== shared.id)] : page.posts
+  return { posts, nextCursor: page.next_cursor, sharedMissing: sharedPostId !== null && shared === null }
 }
 
 // A stable-but-varied background per post -- shown behind the real
@@ -188,7 +201,13 @@ function CommentsSheet({
   )
 }
 
-export function FeedScreen() {
+export function FeedScreen({
+  sharedPostId,
+  onSharedHandled,
+}: {
+  sharedPostId: string | null
+  onSharedHandled: () => void
+}) {
   const { session } = useAuth()
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -221,14 +240,18 @@ export function FeedScreen() {
   const loadingMoreRef = useRef(false)
   const loadMoreRef = useRef<() => void>(() => {})
 
+  // Runs once, when the feed opens -- `sharedPostId` is only ever the link the
+  // app was opened with, and it's cleared as soon as it's been used.
   useEffect(() => {
-    fetchNonEmptyPage()
-      .then((page) => {
-        setPosts(page.posts)
-        setCursor(page.next_cursor)
+    fetchFirstScreen(sharedPostId)
+      .then(({ posts, nextCursor, sharedMissing }) => {
+        setPosts(posts)
+        setCursor(nextCursor)
+        if (sharedPostId) onSharedHandled()
+        if (sharedMissing) showToast("That post isn't available any more.")
       })
       .catch((e) => setError(e.message))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (posts !== null || error) return
@@ -331,13 +354,13 @@ export function FeedScreen() {
     }
   }
 
-  // No per-post URLs exist yet (this app has no router -- see Milestone
-  // 5's honest gap), so this shares a caption plus the app's general
-  // link, not a deep link straight to this exact post.
+  // Shares a short caption plus a link that opens this exact post (see
+  // lib/shareLink.ts) -- the phone's share sheet where there is one, otherwise
+  // it copies both to the clipboard.
   async function handleShare(post: Post) {
     const caption = post.kind === 'text' ? post.content : captionFor(post)
     const text = `${post.declared_topic}: "${caption.length > 100 ? `${caption.slice(0, 100)}...` : caption}" -- checked on TrustFeed`
-    const url = window.location.origin
+    const url = shareUrlFor(post.id)
 
     if (navigator.share) {
       try {

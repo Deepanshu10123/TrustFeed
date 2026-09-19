@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { usePostWatcher } from './hooks/usePostWatcher'
 import type { PostStatusRow } from './lib/api'
+import { clearSharedPostId, takeSharedPostId } from './lib/shareLink'
 import { AuthScreen } from './screens/AuthScreen'
 import { FeedScreen } from './screens/FeedScreen'
 import { UploadScreen } from './screens/UploadScreen'
@@ -10,6 +11,10 @@ import { InterestsScreen } from './screens/InterestsScreen'
 import './App.css'
 
 type Tab = 'feed' | 'upload' | 'myposts' | 'interests'
+
+// Someone who opened a shared link: the post to show first once they're in.
+// Read once, as the app loads, before anything can change the address.
+const initialSharedPostId = takeSharedPostId()
 
 const HEADER_TITLES: Record<Tab, string> = {
   feed: 'Feed',
@@ -40,6 +45,7 @@ function App() {
   const [myPostsRefresh, setMyPostsRefresh] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const [unseen, setUnseen] = useState(0)
+  const [sharedPostId, setSharedPostId] = useState<string | null>(initialSharedPostId)
 
   // Says so when a post you uploaded has been checked, wherever you are in
   // the app -- otherwise you'd have to go and look in My Posts.
@@ -83,7 +89,15 @@ function App() {
       )}
 
       <div className="app-content">
-        {tab === 'feed' && <FeedScreen />}
+        {tab === 'feed' && (
+          <FeedScreen
+            sharedPostId={sharedPostId}
+            onSharedHandled={() => {
+              clearSharedPostId()
+              setSharedPostId(null)
+            }}
+          />
+        )}
         {tab === 'upload' && (
           <UploadScreen
             onUploaded={(postId) => {
