@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { deletePost, getMyPosts, getProfile, progressStreamUrl, retryPost, uploadAvatar } from '../lib/api'
 import type { Post, PostStatus } from '../lib/types'
 import { previewFor, timeAgo } from '../lib/format'
+import { ProfileSkeleton } from './Skeletons'
 import './MyPostsScreen.css'
 
 const POLL_INTERVAL_MS = 4000
@@ -171,7 +172,7 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
   }
 
   if (error) return <div className="panel-padding">Couldn't load your posts: {error}</div>
-  if (posts === null) return <div className="panel-padding">Loading...</div>
+  if (posts === null) return <ProfileSkeleton />
 
   const publishedCount = posts.filter((p) => p.status === 'published').length
 

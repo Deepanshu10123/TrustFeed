@@ -146,6 +146,13 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health():
+    """Answers straight away without touching the database -- what the
+    keep-awake job visits (see .github/workflows/keep-awake.yml)."""
+    return {"status": "ok"}
+
+
 @app.post("/posts")
 async def create_post(
     kind: str = Form(..., description="'text' or 'video'"),

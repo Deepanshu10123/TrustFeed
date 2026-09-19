@@ -5,6 +5,7 @@ import type { Comment, Post } from '../lib/types'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import { EvidenceSheet } from './EvidenceSheet'
 import { ReportSheet } from './ReportSheet'
+import { FeedSkeleton } from './Skeletons'
 import './FeedScreen.css'
 
 // A stable-but-varied background per post -- shown behind the real
@@ -22,7 +23,17 @@ function bgStyleFor(postId: string): React.CSSProperties {
  * react to that prop changing on an already-playing video. `paused` is the
  * viewer's own choice via the pause button -- it holds the video still even
  * while its slide is on screen. */
-function VideoBackground({ src, muted, paused }: { src: string; muted: boolean; paused: boolean }) {
+function VideoBackground({
+  src,
+  muted,
+  paused,
+  preload,
+}: {
+  src: string
+  muted: boolean
+  paused: boolean
+  preload: 'auto' | 'metadata'
+}) {
   const ref = useRef<HTMLVideoElement>(null)
   const visibleRef = useRef(false)
   const pausedRef = useRef(paused)
@@ -58,6 +69,7 @@ function VideoBackground({ src, muted, paused }: { src: string; muted: boolean; 
     <video
       ref={ref}
       src={src}
+      preload={preload}
       muted
       loop
       playsInline
@@ -186,11 +198,41 @@ export function FeedScreen() {
   // send two requests that race each other.
   const pendingLikes = useRef<Set<string>>(new Set())
 
+  // Which slide is on screen, so only the videos next to it are loaded --
+  // without this the feed starts fetching all 50 at once.
+  const [activeIndex, setActiveIndex] = useState(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // The first load after the server has been asleep can take up to a minute;
+  // after a few seconds the placeholder says so instead of just sitting there.
+  const [slow, setSlow] = useState(false)
+
   useEffect(() => {
     getFeed()
       .then(setPosts)
       .catch((e) => setError(e.message))
   }, [])
+
+  useEffect(() => {
+    if (posts !== null || error) return
+    const timer = setTimeout(() => setSlow(true), 6000)
+    return () => clearTimeout(timer)
+  }, [posts, error])
+
+  const postCount = posts?.length ?? 0
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) setActiveIndex(Number((entry.target as HTMLElement).dataset.index))
+        }
+      },
+      { root, threshold: 0.6 },
+    )
+    root.querySelectorAll('.feed-slide').forEach((slide) => observer.observe(slide))
+    return () => observer.disconnect()
+  }, [postCount])
 
   function showToast(message: string) {
     setToast(message)
@@ -264,13 +306,13 @@ export function FeedScreen() {
   }
 
   if (error) return <div className="feed-status">Couldn't load the feed: {error}</div>
-  if (posts === null) return <div className="feed-status">Loading the feed...</div>
+  if (posts === null) return <FeedSkeleton slow={slow} />
   if (posts.length === 0) return <div className="feed-status">No published posts yet. Be the first to upload one.</div>
 
   return (
     <>
-    <div className="feed-scroll">
-      {posts.map((post) => {
+    <div className="feed-scroll" ref={scrollRef}>
+      {posts.map((post, index) => {
         const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])
         const badgeClass = badgeClassFor(verdict?.label)
         // What the collapsed caption shows: the video's transcript, or for a
@@ -285,9 +327,21 @@ export function FeedScreen() {
         const liked = post.liked_by_me ?? false
         const isMine = post.user_id === session?.user.id
         return (
-          <div key={post.id} className={`feed-slide${expanded ? ' expanded' : ''}`} style={bgStyleFor(post.id)}>
+          <div
+            key={post.id}
+            data-index={index}
+            className={`feed-slide${expanded ? ' expanded' : ''}`}
+            style={bgStyleFor(post.id)}
+          >
             {post.kind === 'text' && <div className="slide-quote">&ldquo;{post.content}&rdquo;</div>}
-            {post.kind === 'video' && post.video_url && <VideoBackground src={post.video_url} muted={muted} paused={paused} />}
+            {post.kind === 'video' && post.video_url && Math.abs(index - activeIndex) <= 1 && (
+              <VideoBackground
+                src={post.video_url}
+                muted={muted}
+                paused={paused}
+                preload={index === activeIndex || index === activeIndex + 1 ? 'auto' : 'metadata'}
+              />
+            )}
             <div className="slide-scrim" />
 
             <div className="top-controls">

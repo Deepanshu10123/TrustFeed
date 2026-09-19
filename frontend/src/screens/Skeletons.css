@@ -1,0 +1,20 @@
+.sk { display: block; background: var(--chip-bg); border-radius: 8px; animation: sk-pulse 1.4s ease-in-out infinite; }
+@keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+.sk-line { height: 12px; border-radius: 6px; }
+.sk-circle { width: 44px; height: 44px; border-radius: 50%; }
+.sk-avatar { width: 30px; height: 30px; border-radius: 50%; flex: none; }
+.sk-avatar-lg { width: 76px; height: 76px; border-radius: 50%; flex: none; }
+.sk-tile { aspect-ratio: 1; border-radius: 3px; }
+
+/* Same places as the real feed slide: buttons down the right, text bottom-left. */
+.sk-feed { position: relative; height: 100%; background: var(--bg); }
+.sk-rail { position: absolute; right: 12px; bottom: 36px; display: flex; flex-direction: column; gap: 18px; }
+.sk-info { position: absolute; left: 16px; right: 78px; bottom: 22px; display: flex; flex-direction: column; gap: 12px; }
+.sk-row { display: flex; align-items: center; gap: 8px; }
+.sk-note { margin: 8px 0 0; font: 400 12.5px/1.45 'Public Sans', sans-serif; color: var(--text-tertiary); }
+
+.sk-profile { height: 100%; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 18px; overflow: hidden; }
+.sk-profile-header { display: flex; align-items: center; gap: 18px; }
+.sk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
