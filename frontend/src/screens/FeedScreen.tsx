@@ -1,14 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { addComment, deleteComment, getComments, getFeed, getSharedPost, likePost, unlikePost, type FeedPage } from '../lib/api'
+import { getFeed, getSharedPost, likePost, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
-import type { Comment, Post } from '../lib/types'
+import type { Post } from '../lib/types'
 import { forgetSavedFeed, savedFeed, saveFeed, type FeedMode } from '../lib/feedCache'
-import { shareUrlFor } from '../lib/shareLink'
-import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
+import { sharePost } from '../lib/shareLink'
+import { bgStyleFor, timeAgo, uploaderHandle } from '../lib/format'
+import { CommentsSheet } from './CommentsSheet'
 import { EvidenceSheet } from './EvidenceSheet'
+import { ReelCaption } from './ReelCaption'
+import { CommentIcon, MutedIcon, PauseIcon, PlayIcon, ShareIcon, SoundIcon } from './ReelIcons'
 import { ReportSheet } from './ReportSheet'
 import { UserProfileSheet } from './UserProfileSheet'
 import { FeedSkeleton } from './Skeletons'
+import { VideoBackground } from './VideoBackground'
 import './FeedScreen.css'
 
 // A page can come back empty while there's still more to see -- when every
@@ -47,199 +51,18 @@ function FeedTabs({ mode, onChange }: { mode: FeedMode; onChange: (mode: FeedMod
   )
 }
 
-// A stable-but-varied background per post -- shown behind the real
-// <video> while it loads, and as the only background for text posts.
-function bgStyleFor(postId: string): React.CSSProperties {
-  let hash = 0
-  for (const ch of postId) hash = (hash * 31 + ch.charCodeAt(0)) % 360
-  return { background: `linear-gradient(160deg, oklch(46% 0.08 ${hash}), oklch(20% 0.06 ${(hash + 20) % 360}))` }
-}
-
-/** Plays only while its own slide is actually visible in the snap-scroll
- * feed -- otherwise every video in the feed would play at once. Starts
- * muted because browsers block autoplay-with-sound outright; `muted` is
- * set imperatively (not just as a JSX prop) since browsers don't reliably
- * react to that prop changing on an already-playing video. `paused` is the
- * viewer's own choice via the pause button -- it holds the video still even
- * while its slide is on screen. */
-function VideoBackground({
-  src,
-  muted,
-  paused,
-  preload,
-}: {
-  src: string
-  muted: boolean
-  paused: boolean
-  preload: 'auto' | 'metadata'
-}) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const visibleRef = useRef(false)
-  const pausedRef = useRef(paused)
-  // Whether there's a picture yet -- until then (or if it stalls) a small ring
-  // turns, so a slow connection doesn't look like a dead screen.
-  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
-
-  useEffect(() => {
-    const video = ref.current
-    if (!video) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        visibleRef.current = entry.isIntersecting
-        if (entry.isIntersecting && !pausedRef.current) video.play().catch(() => {})
-        else video.pause()
-      },
-      { threshold: 0.6 },
-    )
-    observer.observe(video)
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    pausedRef.current = paused
-    const video = ref.current
-    if (!video) return
-    if (paused) video.pause()
-    else if (visibleRef.current) video.play().catch(() => {})
-  }, [paused])
-
-  useEffect(() => {
-    if (ref.current) ref.current.muted = muted
-  }, [muted])
-
-  return (
-    <>
-      <video
-        ref={ref}
-        src={src}
-        preload={preload}
-        muted
-        loop
-        playsInline
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-        onLoadedData={() => setStatus('ready')}
-        onPlaying={() => setStatus('ready')}
-        onWaiting={() => setStatus('loading')}
-        onError={() => setStatus('failed')}
-      />
-      {status === 'loading' && <span className="video-loading" aria-hidden="true" />}
-    </>
-  )
-}
-
-/** A comment thread for one post, opened over the whole feed as a bottom
- * sheet. No moderation beyond sign-in and "delete your own, or delete
- * anything on your own post" -- a real launch would need more than that,
- * same honest gap as post content itself (ADR 0002). */
-function CommentsSheet({
-  post,
-  currentUserId,
-  onClose,
-  onOpenProfile,
-}: {
-  post: Post
-  currentUserId: string | undefined
-  onClose: () => void
-  onOpenProfile: (userId: string) => void
-}) {
-  const [comments, setComments] = useState<Comment[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [text, setText] = useState('')
-  const [posting, setPosting] = useState(false)
-
-  function load() {
-    getComments(post.id)
-      .then(setComments)
-      .catch((e) => setError(e.message))
-  }
-
-  useEffect(load, [post.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleSubmit() {
-    const value = text.trim()
-    if (!value) return
-    setPosting(true)
-    try {
-      await addComment(post.id, value)
-      setText('')
-      load()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setPosting(false)
-    }
-  }
-
-  async function handleDelete(commentId: string) {
-    try {
-      await deleteComment(commentId)
-      load()
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  const canModerateAll = currentUserId === post.user_id
-
-  return (
-    <div className="sheet-overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-header">
-          <span>Comments</span>
-          <button className="sheet-close" onClick={onClose} type="button" aria-label="Close">
-            &times;
-          </button>
-        </div>
-        <div className="sheet-list">
-          {error && <div className="comment-empty">{error}</div>}
-          {comments === null && !error && <div className="comment-empty">Loading...</div>}
-          {comments?.length === 0 && <div className="comment-empty">No comments yet -- say something.</div>}
-          {comments?.map((c) => (
-            <div className="comment-row" key={c.id}>
-              <span className="comment-avatar">{handleForUser(c.user_id, c.username).charAt(1).toUpperCase()}</span>
-              <div className="comment-body">
-                <div className="comment-meta">
-                  <button className="comment-handle comment-link" type="button" onClick={() => onOpenProfile(c.user_id)}>
-                    {handleForUser(c.user_id, c.username)}
-                  </button>
-                  <span className="comment-time">{timeAgo(c.created_at)}</span>
-                </div>
-                <div className="comment-text">{c.text}</div>
-              </div>
-              {(c.user_id === currentUserId || canModerateAll) && (
-                <button className="comment-delete" onClick={() => handleDelete(c.id)} type="button">
-                  Delete
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="comment-form">
-          <input
-            className="comment-input"
-            placeholder="Add a comment..."
-            value={text}
-            maxLength={500}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          />
-          <button className="comment-send" onClick={handleSubmit} disabled={posting || !text.trim()} type="button">
-            Post
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function FeedScreen({
   userId,
   sharedPostId,
   onSharedHandled,
+  onFirstLoad,
 }: {
   userId: string
   sharedPostId: string | null
   onSharedHandled: () => void
+  // Called when a fresh first screen has arrived -- the server is awake and the
+  // feed is showing, so it's a good moment to fetch other things quietly.
+  onFirstLoad?: () => void
 }) {
   const { session } = useAuth()
   // Coming back from another tab: the feed as it was left, so it reopens at the
@@ -300,6 +123,7 @@ export function FeedScreen({
         setCursor(nextCursor)
         if (sharedForThisFeed) onSharedHandled()
         if (sharedMissing) showToast("That post isn't available any more.")
+        onFirstLoad?.()
       })
       .catch((e) => {
         if (!cancelled) setError(e.message)
@@ -463,27 +287,11 @@ export function FeedScreen({
   }
 
   // Shares a short caption plus a link that opens this exact post (see
-  // lib/shareLink.ts) -- the phone's share sheet where there is one, otherwise
-  // it copies both to the clipboard.
+  // lib/shareLink.ts).
   async function handleShare(post: Post) {
-    const caption = post.kind === 'text' ? post.content : captionFor(post)
-    const text = `${post.declared_topic}: "${caption.length > 100 ? `${caption.slice(0, 100)}...` : caption}" -- checked on TrustFeed`
-    const url = shareUrlFor(post.id)
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'TrustFeed', text, url })
-      } catch {
-        // the user closed the share sheet without picking anything -- not an error
-      }
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(`${text}\n${url}`)
-      showToast('Link copied to clipboard')
-    } catch {
-      showToast("Couldn't copy the link")
-    }
+    const result = await sharePost(post)
+    if (result === 'copied') showToast('Link copied to clipboard')
+    else if (result === 'failed') showToast("Couldn't copy the link")
   }
 
   const tabs = <FeedTabs mode={mode} onChange={changeMode} />
@@ -518,15 +326,6 @@ export function FeedScreen({
     {tabs}
     <div className="feed-scroll" ref={scrollRef}>
       {posts.map((post, index) => {
-        const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])
-        const badgeClass = badgeClassFor(verdict?.label)
-        // What the collapsed caption shows: the video's transcript, or for a
-        // text post (whose text is already the big quote) the verdict's
-        // explanation. Opening it reveals everything.
-        const caption = post.kind === 'video' ? captionFor(post) : ''
-        const explanation = verdict?.explanation ?? post.report?.report?.summary ?? ''
-        const preview = caption || explanation
-        const hasMore = (caption !== '' && explanation !== '') || preview.length > 60
         const expanded = expandedId === post.id
         const paused = pausedIds.has(post.id)
         const liked = post.liked_by_me ?? false
@@ -553,19 +352,11 @@ export function FeedScreen({
               <div className="pill-group">
                 {post.kind === 'video' && (
                   <button className="icon-pill" type="button" aria-label={paused ? 'Play' : 'Pause'} onClick={() => togglePause(post.id)}>
-                    {paused ? (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-                    )}
+                    {paused ? <PlayIcon /> : <PauseIcon />}
                   </button>
                 )}
                 <button className="icon-pill" type="button" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted((m) => !m)}>
-                  {muted ? (
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4z" /><line x1="16" y1="9" x2="21" y2="15" /><line x1="21" y1="9" x2="16" y2="15" /></svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4z" /><path d="M16.5 8.5a5 5 0 010 7" /><path d="M19 6a8.5 8.5 0 010 12" /></svg>
-                  )}
+                  {muted ? <MutedIcon /> : <SoundIcon />}
                 </button>
               </div>
               {!isMine && (
@@ -590,12 +381,12 @@ export function FeedScreen({
               </button>
               <button className="rail-btn" type="button" onClick={() => setCommentsPost(post)}>
                 <span className="circle">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 01-8.9 8.4 9 9 0 01-3.6-.7L3 20l1-4.7A8.3 8.3 0 013.5 11 8.4 8.4 0 0112 3.1a8.5 8.5 0 019 8.4z" /></svg>
+                  <CommentIcon />
                 </span>
               </button>
               <button className="rail-btn" type="button" onClick={() => handleShare(post)}>
                 <span className="circle">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v14" /></svg>
+                  <ShareIcon />
                 </span>
                 <span className="count">Share</span>
               </button>
@@ -615,34 +406,12 @@ export function FeedScreen({
                 </button>
                 <span className="posted-ago">{timeAgo(post.created_at)}</span>
               </div>
-              <div className="tag-row">
-                <span className="topic-chip">{post.declared_topic}</span>
-                <button
-                  className={`badge ${badgeClass}`}
-                  type="button"
-                  aria-label="See how this was checked"
-                  onClick={() => setEvidencePost(post)}
-                >
-                  {verdict?.label ?? 'No factual claims'}
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-                </button>
-              </div>
-              {expanded ? (
-                <div className="post-text">
-                  {caption && <div className="caption">{caption}</div>}
-                  {explanation && <div className="verdict-explanation">{explanation}</div>}
-                  <button className="more-btn" type="button" onClick={() => setExpandedId(null)}>
-                    less
-                  </button>
-                </div>
-              ) : hasMore ? (
-                <button className="post-text-btn" type="button" onClick={() => setExpandedId(post.id)}>
-                  <span className="caption clamped">{preview}</span>
-                  <span className="more-btn">more</span>
-                </button>
-              ) : (
-                preview && <div className="caption">{preview}</div>
-              )}
+              <ReelCaption
+                post={post}
+                expanded={expanded}
+                onExpandedChange={(open) => setExpandedId(open ? post.id : null)}
+                onOpenEvidence={setEvidencePost}
+              />
             </div>
           </div>
         )

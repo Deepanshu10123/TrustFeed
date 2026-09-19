@@ -1,0 +1,6 @@
+/* Your own reels, opened from the profile grid (see ProfileReels.tsx). It fills
+   the profile screen; the slides inside are drawn by the feed's styles. */
+.reels-overlay {
+  position: absolute; inset: 0; z-index: 4;
+  background: var(--bg);
+}

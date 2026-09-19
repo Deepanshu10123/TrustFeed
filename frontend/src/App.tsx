@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { usePostWatcher } from './hooks/usePostWatcher'
 import type { PostStatusRow } from './lib/api'
+import { prefetchMyProfile } from './lib/myProfileCache'
 import { loadSavedTab, rememberTab, type Tab } from './lib/savedTab'
 import { clearSharedPostId, takeSharedPostId } from './lib/shareLink'
 import { AuthScreen } from './screens/AuthScreen'
@@ -99,6 +100,7 @@ function App() {
         {tab === 'feed' && (
           <FeedScreen
             userId={session.user.id}
+            onFirstLoad={() => prefetchMyProfile(session.user.id, myPostsRefresh)}
             sharedPostId={sharedPostId}
             onSharedHandled={() => {
               clearSharedPostId()

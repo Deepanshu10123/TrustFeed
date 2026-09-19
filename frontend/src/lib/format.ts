@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { Post, Verdict, VerdictLabel } from './types'
 
 const BADGE_CLASS: Record<VerdictLabel, string> = {
@@ -62,4 +63,12 @@ export function previewFor(post: Post): string {
   if (post.kind === 'video') return `${topic} · video post`
   const text = post.content.length > 60 ? `${post.content.slice(0, 60)}...` : post.content
   return `${topic} · "${text}"`
+}
+
+// A stable-but-varied background per post -- shown behind the real
+// <video> while it loads, and as the only background for text posts.
+export function bgStyleFor(postId: string): CSSProperties {
+  let hash = 0
+  for (const ch of postId) hash = (hash * 31 + ch.charCodeAt(0)) % 360
+  return { background: `linear-gradient(160deg, oklch(46% 0.08 ${hash}), oklch(20% 0.06 ${(hash + 20) % 360}))` }
 }

@@ -5,6 +5,7 @@ import { previewFor, suggestUsername, timeAgo } from '../lib/format'
 import { forgetSavedFeed } from '../lib/feedCache'
 import { savedProfile, saveProfile } from '../lib/myProfileCache'
 import { useAuth } from '../hooks/useAuth'
+import { ProfileReels } from './ProfileReels'
 import { ProfileSkeleton } from './Skeletons'
 import { UsernameSheet } from './UsernameSheet'
 import { VideoThumb } from './VideoThumb'
@@ -88,6 +89,8 @@ export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refre
   const [editingUsername, setEditingUsername] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
+  // The reel that was tapped, while the reel viewer is open over the grid.
+  const [viewingId, setViewingId] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
   // Something is already on screen, so a refresh that fails shouldn't wipe it.
@@ -172,15 +175,20 @@ export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refre
     }
   }
 
-  async function handleDelete(postId: string) {
-    if (!window.confirm('Delete this post? This removes it everywhere, including the shared feed.')) return
+  // Returns why it failed, if it did (the reel viewer covers this screen, so it
+  // shows that itself); null when it worked or the person changed their mind.
+  async function handleDelete(postId: string): Promise<string | null> {
+    if (!window.confirm('Delete this post? This removes it everywhere, including the shared feed.')) return null
     setDeleteError(null)
     try {
       await deletePost(postId)
       forgetSavedFeed() // it may be in the feed you left -- load that again too
+      setPosts((prev) => prev?.filter((p) => p.id !== postId) ?? prev) // gone from the screen straight away
       load()
+      return null
     } catch (e) {
       setDeleteError((e as Error).message)
+      return (e as Error).message
     }
   }
 
@@ -239,8 +247,14 @@ export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refre
                 key={post.id}
                 className="grid-tile"
                 onClick={() => {
-                  setSelected(post)
-                  setRetryError(null)
+                  // A posted reel opens to watch; the rest (still checking,
+                  // rejected, failed...) open their status panel.
+                  if (post.status === 'published') {
+                    setViewingId(post.id)
+                  } else {
+                    setSelected(post)
+                    setRetryError(null)
+                  }
                 }}
                 type="button"
               >
@@ -261,6 +275,16 @@ export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refre
           </div>
         )}
       </div>
+
+      {viewingId && (
+        <ProfileReels
+          posts={posts}
+          startId={viewingId}
+          currentUserId={userId}
+          onClose={() => setViewingId(null)}
+          onDelete={handleDelete}
+        />
+      )}
 
       {editingUsername && (
         <UsernameSheet
