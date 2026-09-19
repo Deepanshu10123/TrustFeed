@@ -47,19 +47,25 @@ def init_error_tracking(service: str) -> None:
         return
     import sentry_sdk
 
-    sentry_sdk.init(
-        dsn=dsn,
-        server_name=service,
-        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
-        before_send=scrub_event,
-        send_default_pii=False,  # no cookies, IP addresses or sign-in headers
-        max_request_body_size="never",  # people's posts and comments stay out of it
-        # By default each line of the stack trace also carries the variables
-        # that were in use -- including the raw request, sign-in token and all.
-        # The trace and error message are enough to debug; the values aren't worth the risk.
-        include_local_variables=False,
-        traces_sample_rate=0,  # errors only, no performance tracing
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            server_name=service,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+            before_send=scrub_event,
+            send_default_pii=False,  # no cookies, IP addresses or sign-in headers
+            max_request_body_size="never",  # people's posts and comments stay out of it
+            # By default each line of the stack trace also carries the variables
+            # that were in use -- including the raw request, sign-in token and all.
+            # The trace and error message are enough to debug; the values aren't worth the risk.
+            include_local_variables=False,
+            traces_sample_rate=0,  # errors only, no performance tracing
+        )
+    except Exception as e:
+        # A mistyped key should cost you the error alarms, not the whole app.
+        # (The key itself is left out of the message on purpose.)
+        print(f"Error tracking is OFF: SENTRY_DSN isn't a valid Sentry address ({type(e).__name__}). Carrying on without it.")
+        return
     _enabled = True
 
 

@@ -58,6 +58,17 @@ def test_the_privacy_settings_are_always_on(monkeypatch):
     assert seen["traces_sample_rate"] == 0
 
 
+def test_a_mistyped_dsn_turns_tracking_off_instead_of_stopping_the_app(monkeypatch, capsys):
+    monkeypatch.setenv("SENTRY_DSN", 'dsn="https://abc@o1.ingest.sentry.io/1",')  # pasted with the extras
+    monkeypatch.setattr(monitoring, "_enabled", False)
+    init_error_tracking("api")  # must not raise
+    assert monitoring._enabled is False
+    printed = capsys.readouterr().out
+    assert "Error tracking is OFF" in printed
+    assert "abc@o1" not in printed  # the key itself is never printed
+    report_error(RuntimeError("ignored"))  # still safe to call
+
+
 def test_nothing_happens_without_a_dsn(monkeypatch):
     monkeypatch.delenv("SENTRY_DSN", raising=False)
     monkeypatch.setattr(monitoring, "_enabled", False)
