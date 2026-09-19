@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { deletePost, getMyPosts, getProfile, progressStreamUrl, retryPost, uploadAvatar } from '../lib/api'
 import type { Post, PostStatus } from '../lib/types'
-import { previewFor, timeAgo } from '../lib/format'
+import { previewFor, suggestUsername, timeAgo } from '../lib/format'
+import { useAuth } from '../hooks/useAuth'
 import { ProfileSkeleton } from './Skeletons'
+import { UsernameSheet } from './UsernameSheet'
 import './MyPostsScreen.css'
 
 const POLL_INTERVAL_MS = 4000
@@ -91,7 +93,10 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const { session } = useAuth()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [username, setUsernameValue] = useState<string | null>(null)
+  const [editingUsername, setEditingUsername] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
   const [retrying, setRetrying] = useState(false)
@@ -109,8 +114,11 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
 
   useEffect(() => {
     getProfile()
-      .then((p) => setAvatarUrl(p.avatar_url))
-      .catch(() => {}) // no profile row yet just means no avatar set -- not worth surfacing as an error
+      .then((p) => {
+        setAvatarUrl(p.avatar_url)
+        setUsernameValue(p.username)
+      })
+      .catch(() => {}) // no profile row yet just means no avatar or username set -- not worth surfacing as an error
   }, [])
 
   // Poll while anything is still processing -- this is how the frontend
@@ -185,14 +193,23 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
             {avatarUrl ? <img src={avatarUrl} alt="Your profile" /> : <span className="avatar-placeholder">+</span>}
             <span className="avatar-edit-badge">{uploadingAvatar ? 'Uploading...' : 'Edit'}</span>
           </label>
-          <div className="profile-stats">
-            <div className="stat">
-              <strong>{posts.length}</strong>
-              <span>Posts</span>
-            </div>
-            <div className="stat">
-              <strong>{publishedCount}</strong>
-              <span>Published</span>
+          <div className="profile-info">
+            <button className={`profile-name${username ? '' : ' unset'}`} type="button" onClick={() => setEditingUsername(true)}>
+              {username ? `@${username}` : 'Choose a username'}
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+              </svg>
+            </button>
+            <div className="profile-stats">
+              <div className="stat">
+                <strong>{posts.length}</strong>
+                <span>Posts</span>
+              </div>
+              <div className="stat">
+                <strong>{publishedCount}</strong>
+                <span>Published</span>
+              </div>
             </div>
           </div>
         </div>
@@ -230,6 +247,18 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
           </div>
         )}
       </div>
+
+      {editingUsername && (
+        <UsernameSheet
+          current={username}
+          suggestion={suggestUsername(session?.user.user_metadata?.full_name ?? session?.user.user_metadata?.name, session?.user.email)}
+          onClose={() => setEditingUsername(false)}
+          onSaved={(name) => {
+            setUsernameValue(name)
+            setEditingUsername(false)
+          }}
+        />
+      )}
 
       {selected && (
         <div className="post-detail-overlay" onClick={() => setSelected(null)}>

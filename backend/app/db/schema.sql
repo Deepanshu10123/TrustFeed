@@ -106,3 +106,11 @@ alter table reports enable row level security;
 -- or restarted mid-check -- so the API marks it failed and lets its owner
 -- retry it. Existing rows get the moment this runs, which is fine.
 alter table posts add column queued_at timestamptz not null default now();
+
+-- Usernames: what people see on posts and comments instead of an anonymous
+-- id. Lower case only, so "Deep" and "deep" can't be two different people,
+-- and unique so no two people share one. Everyone starts without one (the
+-- app falls back to the anonymous id) until they choose it in My Posts.
+alter table user_preferences
+  add column username text unique
+  check (username ~ '^[a-z0-9_]{3,20}$');

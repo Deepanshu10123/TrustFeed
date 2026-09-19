@@ -33,6 +33,7 @@ export interface Comment {
   id: string
   post_id: string
   user_id: string
+  username?: string | null
   text: string
   created_at: string
 }
@@ -53,4 +54,5 @@ export interface Post {
   like_count?: number
   liked_by_me?: boolean
   uploader_avatar_url?: string | null
+  uploader_username?: string | null
 }

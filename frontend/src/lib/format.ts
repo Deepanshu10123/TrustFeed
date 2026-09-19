@@ -34,12 +34,22 @@ export function summarizeVerdict(verdicts: Verdict[]): Verdict | null {
   return [...verdicts].sort((a, b) => rank[a.label] - rank[b.label])[0]
 }
 
-export function handleForUser(userId: string): string {
-  return `@user-${userId.slice(0, 6)}`
+/** A starting point for someone who hasn't picked a username yet: their
+ * Google name (or the start of their email), boiled down to letters and
+ * numbers. Empty if nothing usable comes out. */
+export function suggestUsername(name?: string, email?: string): string {
+  const cleaned = (name || email?.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)
+  return cleaned.length >= 3 ? cleaned : ''
+}
+
+/** How a person is shown: their chosen username, or -- until they pick one --
+ * an anonymous handle made from part of their id. */
+export function handleForUser(userId: string, username?: string | null): string {
+  return username ? `@${username}` : `@user-${userId.slice(0, 6)}`
 }
 
 export function uploaderHandle(post: Post): string {
-  return handleForUser(post.user_id)
+  return handleForUser(post.user_id, post.uploader_username)
 }
 
 export function captionFor(post: Post): string {

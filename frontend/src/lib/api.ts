@@ -107,8 +107,16 @@ export async function deletePost(postId: string): Promise<{ deleted: string }> {
   return request(`/posts/${postId}`, { method: 'DELETE' })
 }
 
-export async function getProfile(): Promise<{ avatar_url: string | null }> {
+export async function getProfile(): Promise<{ avatar_url: string | null; username: string | null }> {
   return request('/profile')
+}
+
+export async function setUsername(username: string): Promise<{ username: string }> {
+  return request('/profile/username', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  })
 }
 
 export async function uploadAvatar(file: File): Promise<{ avatar_url: string }> {

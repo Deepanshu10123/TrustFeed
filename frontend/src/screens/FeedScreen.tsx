@@ -154,10 +154,10 @@ function CommentsSheet({
           {comments?.length === 0 && <div className="comment-empty">No comments yet -- say something.</div>}
           {comments?.map((c) => (
             <div className="comment-row" key={c.id}>
-              <span className="comment-avatar">U</span>
+              <span className="comment-avatar">{handleForUser(c.user_id, c.username).charAt(1).toUpperCase()}</span>
               <div className="comment-body">
                 <div className="comment-meta">
-                  <span className="comment-handle">{handleForUser(c.user_id)}</span>
+                  <span className="comment-handle">{handleForUser(c.user_id, c.username)}</span>
                   <span className="comment-time">{timeAgo(c.created_at)}</span>
                 </div>
                 <div className="comment-text">{c.text}</div>

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from postgrest.exceptions import APIError
 from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
@@ -32,6 +33,7 @@ from app.core.config import (
 from app.core.limits import daily_limit_error
 from app.core.stuck import find_stuck
 from app.core.topics import TOPICS
+from app.core.usernames import check_username
 from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
 from app.jobs.progress import subscribe_progress
@@ -123,18 +125,18 @@ async def _optional(label: str, default, fn, *args):
         return default
 
 
-def _avatar_urls(user_ids: list[str]) -> dict[str, str | None]:
-    """Uploader avatars for a batch of users in one query -- users who
-    never set one simply aren't in the result."""
+def _profiles(user_ids: list[str]) -> dict[str, dict]:
+    """The avatar and username of a batch of users in one query, keyed by
+    user id -- someone who's set neither simply has no entry."""
     rows = (
         get_supabase_client()
         .table("user_preferences")
-        .select("user_id,avatar_url")
+        .select("user_id,avatar_url,username")
         .in_("user_id", user_ids)
         .execute()
         .data
     )
-    return {row["user_id"]: row["avatar_url"] for row in rows}
+    return {row["user_id"]: row for row in rows}
 
 # The frontend (Vite dev server locally, a deployed Vercel origin in
 # production) runs on a different origin than this API, so the browser
@@ -422,8 +424,29 @@ async def set_interests(body: InterestsBody, user=Depends(get_current_user)):
 
 @app.get("/profile")
 async def get_profile(user=Depends(get_current_user)):
-    result = get_supabase_client().table("user_preferences").select("avatar_url").eq("user_id", user.id).execute()
-    return {"avatar_url": result.data[0]["avatar_url"] if result.data else None}
+    result = (
+        get_supabase_client().table("user_preferences").select("avatar_url,username").eq("user_id", user.id).execute()
+    )
+    profile = result.data[0] if result.data else {}
+    return {"avatar_url": profile.get("avatar_url"), "username": profile.get("username")}
+
+
+class UsernameBody(BaseModel):
+    username: str
+
+
+@app.put("/profile/username")
+async def set_username(body: UsernameBody, user=Depends(get_current_user)):
+    username, problem = check_username(body.username)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    try:
+        get_supabase_client().table("user_preferences").upsert({"user_id": user.id, "username": username}).execute()
+    except APIError as e:
+        if e.code == "23505":  # unique violation: someone else already has it
+            raise HTTPException(status_code=409, detail="That username is taken. Try another.") from e
+        raise
+    return {"username": username}
 
 
 @app.post("/profile/avatar")
@@ -494,9 +517,11 @@ async def get_feed(before: str | None = None, user=Depends(get_current_user)):
     post_ids = [p["id"] for p in posts]
     user_ids = list({p["user_id"] for p in posts})
 
-    like_info, avatars, reported, _ = await asyncio.gather(
+    like_info, profiles, reported, _ = await asyncio.gather(
         _optional("likes", {}, _like_info, post_ids, user.id),
-        asyncio.to_thread(_avatar_urls, user_ids),
+        # Names and pictures are an add-on too: until the username SQL has
+        # been run this lookup fails, and the feed should still load.
+        _optional("profiles", {}, _profiles, user_ids),
         _optional("reports", set(), _reported_by, post_ids, user.id),
         asyncio.to_thread(_attach_video_urls, posts),
     )
@@ -506,7 +531,9 @@ async def get_feed(before: str | None = None, user=Depends(get_current_user)):
         info = like_info.get(post["id"], {})
         post["like_count"] = info.get("like_count", 0)
         post["liked_by_me"] = info.get("liked_by_me", False)
-        post["uploader_avatar_url"] = avatars.get(post["user_id"])
+        profile = profiles.get(post["user_id"], {})
+        post["uploader_avatar_url"] = profile.get("avatar_url")
+        post["uploader_username"] = profile.get("username")
     return {"posts": posts, "next_cursor": next_cursor}
 
 
@@ -570,7 +597,12 @@ async def list_comments(post_id: str, user=Depends(get_current_user)):
         .order("created_at")
         .execute()
     )
-    return result.data
+    comments = result.data
+    if comments:
+        profiles = await _optional("profiles", {}, _profiles, list({c["user_id"] for c in comments}))
+        for comment in comments:
+            comment["username"] = profiles.get(comment["user_id"], {}).get("username")
+    return comments
 
 
 @app.post("/posts/{post_id}/comments")
