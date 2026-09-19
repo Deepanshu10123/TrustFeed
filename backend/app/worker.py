@@ -30,6 +30,7 @@ from app.agents.models import Verdict
 from app.agents.pipeline import run_verification, run_verification_from_video
 from app.agents.relevance import score_relevance
 from app.core.config import get_gemini_api_key
+from app.core.monitoring import init_error_tracking, report_error
 from app.db.supabase_client import VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
 from app.jobs.progress import END_OF_STREAM, publish_progress
@@ -80,6 +81,7 @@ def _save_failure(post_id: str, error: str) -> None:
 
 
 def run_worker() -> None:
+    init_error_tracking("worker")
     client = genai.Client(api_key=get_gemini_api_key())
     # flush=True on every print here: stdout is fully buffered (not
     # line-buffered) when it isn't attached to a real terminal, so without
@@ -117,6 +119,7 @@ def run_worker() -> None:
             print(f"[worker] finished job {job.job_id} -> {status}", flush=True)
         except Exception as e:
             print(f"[worker] job {job.job_id} failed: {e}", flush=True)
+            report_error(e)  # handled here, but still worth knowing about
             _save_failure(job.job_id, str(e))
         finally:
             publish_progress(job.job_id, END_OF_STREAM)

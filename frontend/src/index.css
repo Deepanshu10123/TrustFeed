@@ -11,6 +11,21 @@ body {
 button { font-family: inherit; }
 a { color: var(--text-secondary); }
 
+/* Shown by ErrorBoundary if a screen crashes. Lives here, not in a screen's
+   own stylesheet, so it still works when the screen that broke is one of those. */
+.crash-screen {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+}
+.crash-screen h1 { margin: 0; font: 700 20px/1.2 'Public Sans', sans-serif; }
+.crash-screen p { margin: 0; max-width: 320px; color: var(--text-secondary); font: 400 14px/1.5 'Public Sans', sans-serif; }
+.crash-btn {
+  margin-top: 8px; min-height: 48px; padding: 0 28px;
+  border: none; border-radius: 10px; cursor: pointer;
+  background: var(--btn-bg); color: var(--btn-fg);
+  font: 600 15px/1 'Public Sans', sans-serif;
+}
+
 :root {
   --bg: oklch(9% 0.004 260);
   --surface: oklch(15% 0.006 260);

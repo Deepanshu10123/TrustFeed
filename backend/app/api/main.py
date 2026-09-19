@@ -31,6 +31,7 @@ from app.core.config import (
     get_stuck_post_minutes,
 )
 from app.core.limits import daily_limit_error
+from app.core.monitoring import init_error_tracking
 from app.core.stuck import find_stuck
 from app.core.topics import TOPICS
 from app.core.usernames import check_username
@@ -38,6 +39,9 @@ from app.db.supabase_client import AVATAR_BUCKET, VIDEO_BUCKET, get_supabase_cli
 from app.jobs.models import Job
 from app.jobs.progress import subscribe_progress
 from app.jobs.queue import enqueue
+
+# Before the app is created, so error reporting can hook into it.
+init_error_tracking("api")
 
 app = FastAPI(title="TrustFeed API Service")
 
