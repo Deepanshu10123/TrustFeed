@@ -35,12 +35,20 @@ def _attach_video_urls(posts: list[dict]) -> list[dict]:
     playable URL -- generate a temporary signed one for each video post
     being returned. Only ever called on posts a caller is already
     authorized to see (this adds no new access, it just makes existing
-    access playable)."""
-    supabase = get_supabase_client()
+    access playable).
+
+    Batched into one call instead of one request per video -- the
+    original per-post loop meant a feed page of, say, 10 videos cost 10
+    separate network round-trips to Supabase on top of the posts query
+    itself, a real N+1 pattern and a genuine source of slow load times."""
+    video_paths = [post["content"] for post in posts if post["kind"] == "video"]
+    if not video_paths:
+        return posts
+    signed = get_supabase_client().storage.from_(VIDEO_BUCKET).create_signed_urls(video_paths, VIDEO_URL_EXPIRY_S)
+    url_by_path = {item["path"]: item.get("signedUrl") or item.get("signedURL") for item in signed}
     for post in posts:
         if post["kind"] == "video":
-            signed = supabase.storage.from_(VIDEO_BUCKET).create_signed_url(post["content"], VIDEO_URL_EXPIRY_S)
-            post["video_url"] = signed.get("signedUrl") or signed.get("signedURL")
+            post["video_url"] = url_by_path.get(post["content"])
     return posts
 
 # The frontend (Vite dev server locally, a deployed Vercel origin in

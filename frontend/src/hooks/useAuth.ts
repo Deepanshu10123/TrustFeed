@@ -24,6 +24,11 @@ export function useAuth() {
     loading,
     signUp: (email: string, password: string) => supabase.auth.signUp({ email, password }),
     signIn: (email: string, password: string) => supabase.auth.signInWithPassword({ email, password }),
+    // Redirects to Google, then back here -- Supabase's client picks the
+    // resulting session up automatically from the URL on return, same as
+    // any other auth state change this hook already listens for above.
+    signInWithGoogle: () =>
+      supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }),
     signOut: () => supabase.auth.signOut(),
   }
 }
