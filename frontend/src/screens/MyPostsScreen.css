@@ -121,6 +121,7 @@
   font: 600 13.5px/1 'Public Sans', sans-serif;
 }
 .retry-btn:disabled, .save-btn:disabled { opacity: 0.6; cursor: default; }
+.error-retry { display: block; margin-top: 14px; }
 .delete-error { color: var(--unsupported-fg); }
 .spin {
   width: 10px; height: 10px; border-radius: 999px;

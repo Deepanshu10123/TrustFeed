@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { bgStyleFor, timeAgo } from '../lib/format'
+import { useReadyReels } from '../hooks/useReadyReels'
+import { bgStyleFor, preloadFor, timeAgo } from '../lib/format'
 import { sharePost } from '../lib/shareLink'
 import type { Post } from '../lib/types'
 import { CommentsSheet } from './CommentsSheet'
@@ -44,6 +45,7 @@ export function ProfileReels({
   const [commentsPost, setCommentsPost] = useState<Post | null>(null)
   const [evidencePost, setEvidencePost] = useState<Post | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const { isReady, markReady } = useReadyReels()
 
   // Open on the reel that was tapped, before the first paint.
   useLayoutEffect(() => {
@@ -108,6 +110,10 @@ export function ProfileReels({
     })
   }
 
+  // The next reel waits to load in full until the one you're on can play through.
+  const activePost = reels[activeIndex]
+  const activeSettled = !activePost || activePost.kind !== 'video' || !activePost.video_url || isReady(activePost.id)
+
   return (
     <div className="reels-overlay">
       <div className="feed-scroll" ref={scrollRef}>
@@ -127,7 +133,8 @@ export function ProfileReels({
                   src={post.video_url}
                   muted={muted}
                   paused={paused}
-                  preload={index === activeIndex || index === activeIndex + 1 ? 'auto' : 'metadata'}
+                  preload={preloadFor(index, activeIndex, activeSettled)}
+                  onReady={() => markReady(post.id)}
                 />
               )}
               <div className="slide-scrim" />

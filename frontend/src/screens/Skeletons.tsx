@@ -3,12 +3,19 @@ import './Skeletons.css'
 
 /** Stand-in shapes shown while the feed loads, laid out like the real thing
  * so nothing jumps when it arrives, with the loading animation in the middle.
- * `slow` adds a note for the long first load after the server has been asleep. */
-export function FeedSkeleton({ slow }: { slow: boolean }) {
+ * `slow` adds a note for the long first load after the server has been asleep;
+ * `onRetry`, given once it's really dragging on, adds a "Try again" button. */
+export function FeedSkeleton({ slow, onRetry }: { slow: boolean; onRetry?: () => void }) {
   return (
     <div className="sk-feed" role="status" aria-label="Loading the feed">
       <div className="sk-center">
-        <Loader note={slow ? 'Still loading. The server may be waking up, which can take up to a minute after a quiet spell.' : undefined} />
+        <Loader note={slow ? 'Still loading. The server may be waking up, which can take up to a minute after a quiet spell.' : undefined}>
+          {onRetry && (
+            <button className="loader-btn" type="button" onClick={onRetry}>
+              Try again
+            </button>
+          )}
+        </Loader>
       </div>
       <div className="sk-rail">
         <span className="sk sk-circle" />

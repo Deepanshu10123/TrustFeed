@@ -41,6 +41,11 @@ a { color: var(--text-secondary); }
 }
 @keyframes loader-shine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
 .loader-note { margin: 4px 0 0; max-width: 280px; font: 400 12.5px/1.45 'Public Sans', sans-serif; color: var(--text-tertiary); }
+.loader-btn {
+  margin-top: 8px; min-height: 44px; padding: 0 22px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font: 600 14px/1 'Public Sans', sans-serif; cursor: pointer;
+}
 @media (prefers-reduced-motion: reduce) {
   .loader-ring, .loader-check { animation: none; stroke-dashoffset: 0; }
   .loader-word { animation: none; }

@@ -65,6 +65,13 @@ export function previewFor(post: Post): string {
   return `${topic} · "${text}"`
 }
 
+/** How much of a reel's video to fetch up front. The one on screen loads in
+ * full; the one after it waits until the on-screen one is ready (`activeSettled`)
+ * so the two don't fight over a slow connection; the rest just get the basics. */
+export function preloadFor(index: number, activeIndex: number, activeSettled: boolean): 'auto' | 'metadata' {
+  return index === activeIndex || (index === activeIndex + 1 && activeSettled) ? 'auto' : 'metadata'
+}
+
 // A stable-but-varied background per post -- shown behind the real
 // <video> while it loads, and as the only background for text posts.
 export function bgStyleFor(postId: string): CSSProperties {

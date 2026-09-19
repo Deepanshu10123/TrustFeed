@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { getFeed, getSharedPost, likePost, unlikePost, type FeedPage } from '../lib/api'
+import { getFeed, getSharedPost, likePost, retrying, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
+import { useReadyReels } from '../hooks/useReadyReels'
 import type { Post } from '../lib/types'
 import { forgetSavedFeed, savedFeed, saveFeed, type FeedMode } from '../lib/feedCache'
 import { sharePost } from '../lib/shareLink'
-import { bgStyleFor, timeAgo, uploaderHandle } from '../lib/format'
+import { bgStyleFor, preloadFor, timeAgo, uploaderHandle } from '../lib/format'
 import { CommentsSheet } from './CommentsSheet'
 import { EvidenceSheet } from './EvidenceSheet'
 import { ReelCaption } from './ReelCaption'
@@ -94,6 +95,11 @@ export function FeedScreen({
   // The first load after the server has been asleep can take up to a minute;
   // after a few seconds the placeholder says so instead of just sitting there.
   const [slow, setSlow] = useState(false)
+  // Still nothing after half a minute: offer a way to try again by hand.
+  const [stuck, setStuck] = useState(false)
+  // Bumped by "Try again" to run the first load once more.
+  const [attempt, setAttempt] = useState(0)
+  const { isReady, markReady } = useReadyReels()
 
   // Where the next page starts (null once there's nothing older).
   const [cursor, setCursor] = useState<string | null>(restored?.cursor ?? null)
@@ -111,11 +117,13 @@ export function FeedScreen({
   // between "For you" and "Following". `sharedPostId` is only ever the link the
   // app was opened with (cleared as soon as it's been used) and only applies
   // to "For you". Nothing to load when the feed was restored from a saved copy.
+  // A server that's still waking up (or a dropped connection) is retried by
+  // itself, so the first visit after a quiet spell doesn't need a page reload.
   useEffect(() => {
     if (posts !== null) return
     let cancelled = false
     const sharedForThisFeed = mode === 'all' ? sharedPostId : null
-    fetchFirstScreen(sharedForThisFeed, mode === 'following')
+    retrying(() => fetchFirstScreen(sharedForThisFeed, mode === 'following'), { cancelled: () => cancelled })
       .then(({ posts, nextCursor, sharedMissing }) => {
         if (cancelled) return
         feedStartedAt.current = Date.now()
@@ -131,13 +139,17 @@ export function FeedScreen({
     return () => {
       cancelled = true
     }
-  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, attempt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (posts !== null || error) return
-    const timer = setTimeout(() => setSlow(true), 6000)
-    return () => clearTimeout(timer)
-  }, [posts, error])
+    const slowTimer = setTimeout(() => setSlow(true), 6000)
+    const stuckTimer = setTimeout(() => setStuck(true), 30000)
+    return () => {
+      clearTimeout(slowTimer)
+      clearTimeout(stuckTimer)
+    }
+  }, [posts, error, attempt])
 
   // Back at the reel you left: jump straight to it, before the first paint, so
   // there's no flash of the top of the feed.
@@ -196,9 +208,19 @@ export function FeedScreen({
     setCursor(null)
     setError(null)
     setSlow(false)
+    setStuck(false)
     setLoadFailed(false)
     setActiveIndex(0)
     setExpandedId(null)
+  }
+
+  // "Try again" after the first load failed or seems stuck: start it over.
+  function retryLoad() {
+    setPosts(null)
+    setError(null)
+    setSlow(false)
+    setStuck(false)
+    setAttempt((n) => n + 1)
   }
 
   function scrollToSlide(index: number) {
@@ -299,14 +321,19 @@ export function FeedScreen({
     return (
       <>
         {tabs}
-        <div className="feed-status">Couldn't load the feed: {error}</div>
+        <div className="feed-status">
+          Couldn't load the feed: {error}
+          <button className="feed-end-btn feed-status-btn" type="button" onClick={retryLoad}>
+            Try again
+          </button>
+        </div>
       </>
     )
   if (posts === null)
     return (
       <>
         {tabs}
-        <FeedSkeleton slow={slow} />
+        <FeedSkeleton slow={slow} onRetry={stuck ? retryLoad : undefined} />
       </>
     )
   if (posts.length === 0)
@@ -320,6 +347,12 @@ export function FeedScreen({
         </div>
       </>
     )
+
+  // The next reel only starts loading in full once the one you're on can play
+  // through (or has no video to load), so the two don't compete for a slow
+  // connection and the one you're actually watching arrives first.
+  const activePost = posts[activeIndex]
+  const activeSettled = !activePost || activePost.kind !== 'video' || !activePost.video_url || isReady(activePost.id)
 
   return (
     <>
@@ -343,7 +376,8 @@ export function FeedScreen({
                 src={post.video_url}
                 muted={muted}
                 paused={paused}
-                preload={index === activeIndex || index === activeIndex + 1 ? 'auto' : 'metadata'}
+                preload={preloadFor(index, activeIndex, activeSettled)}
+                onReady={() => markReady(post.id)}
               />
             )}
             <div className="slide-scrim" />

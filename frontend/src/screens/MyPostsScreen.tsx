@@ -192,7 +192,22 @@ export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refre
     }
   }
 
-  if (error) return <div className="panel-padding">Couldn't load your posts: {error}</div>
+  if (error)
+    return (
+      <div className="panel-padding">
+        Couldn't load your posts: {error}
+        <button
+          className="retry-btn error-retry"
+          type="button"
+          onClick={() => {
+            setError(null)
+            load()
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    )
   if (posts === null) return <ProfileSkeleton />
 
   const publishedCount = posts.filter((p) => p.status === 'published').length

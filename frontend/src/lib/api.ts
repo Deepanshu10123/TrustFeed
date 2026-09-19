@@ -40,13 +40,77 @@ function errorMessage(status: number, statusText: string, body: string): string 
   return `${status} ${statusText}: ${body}`
 }
 
+/** A failed request. `status` is the HTTP status, or 0 when there was no answer
+ * at all (offline, or we gave up waiting). */
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+// How long a plain read waits for an answer. The free server can take about a
+// minute to wake up, and on some phones a request made meanwhile just never
+// comes back -- so give up, and let the caller try again, rather than leave the
+// screen loading for ever.
+const READ_TIMEOUT_MS = 25_000
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = { ...(await authHeader()), ...(init?.headers ?? {}) }
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
-  if (!response.ok) {
-    throw new Error(errorMessage(response.status, response.statusText, await response.text()))
+  // Only reads are ever cut off. Anything that changes something (posting,
+  // deleting...) may well have gone through, so it's left to finish.
+  const isRead = (init?.method ?? 'GET') === 'GET'
+  const controller = new AbortController()
+  const timer = isRead ? setTimeout(() => controller.abort(), READ_TIMEOUT_MS) : null
+  const tookTooLong = () => new ApiError('The server is taking too long to answer.', 0)
+  try {
+    let response: Response
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, signal: controller.signal })
+    } catch {
+      throw controller.signal.aborted
+        ? tookTooLong()
+        : new ApiError("Couldn't reach the server. Check your connection and try again.", 0)
+    }
+    if (!response.ok) {
+      throw new ApiError(errorMessage(response.status, response.statusText, await response.text()), response.status)
+    }
+    return await response.json()
+  } catch (e) {
+    if (controller.signal.aborted && !(e instanceof ApiError)) throw tookTooLong() // cut off while reading the reply
+    throw e
+  } finally {
+    if (timer) clearTimeout(timer)
   }
-  return response.json()
+}
+
+/** Worth trying again: no connection, no answer in time, or the server's front
+ * door saying it isn't ready yet (what a sleeping server does while it wakes). */
+export function isTemporary(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504)
+}
+
+/** For loading something a screen can't do without: tries again, with a growing
+ * pause, when the failure looks temporary -- so a server that's still waking up,
+ * or a dropped connection, fixes itself instead of leaving the person on a
+ * loading screen until they think to reload the page. */
+export async function retrying<T>(
+  job: () => Promise<T>,
+  {
+    tries = 6,
+    cancelled = () => false,
+    delayMs = (attempt) => Math.min(2000 * attempt, 8000),
+  }: { tries?: number; cancelled?: () => boolean; delayMs?: (attempt: number) => number } = {},
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await job()
+    } catch (e) {
+      if (attempt >= tries || !isTemporary(e) || cancelled()) throw e
+      await new Promise((resolve) => setTimeout(resolve, delayMs(attempt)))
+    }
+  }
 }
 
 export interface UploadProgress {

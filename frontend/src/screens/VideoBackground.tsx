@@ -12,11 +12,14 @@ export function VideoBackground({
   muted,
   paused,
   preload,
+  onReady,
 }: {
   src: string
   muted: boolean
   paused: boolean
   preload: 'auto' | 'metadata'
+  // Called once the video has loaded enough to play through without stalling.
+  onReady?: () => void
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   const visibleRef = useRef(false)
@@ -71,6 +74,7 @@ export function VideoBackground({
           setStatus('ready')
           setWorking((current) => current ?? src)
         }}
+        onCanPlayThrough={() => onReady?.()}
         onPlaying={() => setStatus('ready')}
         onWaiting={() => setStatus('loading')}
         onError={() => setStatus('failed')}

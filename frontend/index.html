@@ -31,7 +31,7 @@
     <div id="root">
       <!-- Shown while the app's code downloads; React replaces it the moment it
            starts. Same markup as the Loader component (src/screens/Loader.tsx). -->
-      <div class="splash" role="status" aria-label="Loading TrustFeed">
+      <div class="splash" data-static role="status" aria-label="Loading TrustFeed">
         <div class="loader">
           <svg class="loader-mark" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle class="loader-ring" cx="32" cy="32" r="27" pathLength="1"></circle>
@@ -41,6 +41,25 @@
         </div>
       </div>
     </div>
+    <script>
+      // If the app hasn't taken over from the loading screen above after a while (a slow
+      // or dropped connection while its code downloads), say so and offer a reload,
+      // instead of animating for ever.
+      setTimeout(function () {
+        var loader = document.querySelector('#root > .splash[data-static] .loader')
+        if (!loader) return
+        var note = document.createElement('p')
+        note.className = 'loader-note'
+        note.textContent = 'This is taking longer than usual. Your connection may be slow.'
+        var button = document.createElement('button')
+        button.className = 'loader-btn'
+        button.type = 'button'
+        button.textContent = 'Reload'
+        button.onclick = function () { location.reload() }
+        loader.appendChild(note)
+        loader.appendChild(button)
+      }, 12000)
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
