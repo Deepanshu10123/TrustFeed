@@ -30,6 +30,7 @@ from app.core.config import (
     get_report_hide_threshold,
     get_stuck_post_minutes,
 )
+from app.core.interests_cache import cached_topics, remember_topics
 from app.core.limits import daily_limit_error
 from app.core.monitoring import init_error_tracking
 from app.core.stuck import find_stuck
@@ -524,10 +525,21 @@ class CommentBody(BaseModel):
     text: str
 
 
+def _topics_for(user_id: str) -> list[str]:
+    """The topics someone picked, from memory when it has them fresh (see
+    app/core/interests_cache.py), otherwise from the database. Blocking, so
+    callers run it in a thread."""
+    topics = cached_topics(user_id)
+    if topics is None:
+        rows = get_supabase_client().table("user_preferences").select("topics").eq("user_id", user_id).execute().data
+        topics = rows[0]["topics"] if rows else []
+        remember_topics(user_id, topics)
+    return topics
+
+
 @app.get("/interests")
 async def get_interests(user=Depends(get_current_user)):
-    result = get_supabase_client().table("user_preferences").select("topics").eq("user_id", user.id).execute()
-    return {"topics": result.data[0]["topics"] if result.data else []}
+    return {"topics": await asyncio.to_thread(_topics_for, user.id)}
 
 
 @app.put("/interests")
@@ -535,10 +547,10 @@ async def set_interests(body: InterestsBody, user=Depends(get_current_user)):
     invalid = [t for t in body.topics if t not in TOPICS]
     if invalid:
         raise HTTPException(status_code=400, detail=f"Unknown topic(s): {invalid}")
-    get_supabase_client().table("user_preferences").upsert({
-        "user_id": user.id,
-        "topics": body.topics,
-    }).execute()
+    await asyncio.to_thread(
+        lambda: get_supabase_client().table("user_preferences").upsert({"user_id": user.id, "topics": body.topics}).execute()
+    )
+    remember_topics(user.id, body.topics)  # the feed uses this straight away, without asking the database
     return {"topics": body.topics}
 
 
@@ -622,28 +634,33 @@ async def get_feed(before: str | None = None, following: bool = False, user=Depe
         except ValueError:
             raise HTTPException(status_code=400, detail="before must be a timestamp taken from a previous page")
 
-    supabase = get_supabase_client()
     page_size = get_feed_page_size()
 
-    topics: list[str] = []
-    followee_ids: list[str] = []
-    if following:
-        rows = supabase.table("follows").select("followee_id").eq("follower_id", user.id).limit(MAX_FOLLOWING).execute().data
-        followee_ids = [row["followee_id"] for row in rows]
-        if not followee_ids:
-            return {"posts": [], "next_cursor": None}
-    else:
-        prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
-        topics = prefs.data[0]["topics"] if prefs.data else []
+    def read_page() -> list[dict]:
+        """Who you follow (or which topics you picked), then the page itself.
+        Blocking database calls, so this runs in a thread instead of holding
+        up every other request while it waits."""
+        supabase = get_supabase_client()
+        topics: list[str] = []
+        followee_ids: list[str] = []
+        if following:
+            rows = supabase.table("follows").select("followee_id").eq("follower_id", user.id).limit(MAX_FOLLOWING).execute().data
+            followee_ids = [row["followee_id"] for row in rows]
+            if not followee_ids:
+                return []
+        else:
+            topics = _topics_for(user.id)
 
-    query = supabase.table("posts").select("*").eq("status", "published")
-    if before:
-        query = query.lt("created_at", before)
-    if following:
-        query = query.in_("user_id", followee_ids)
-    elif topics:
-        query = query.in_("declared_topic", topics)
-    posts = query.order("created_at", desc=True).limit(page_size).execute().data
+        query = supabase.table("posts").select("*").eq("status", "published")
+        if before:
+            query = query.lt("created_at", before)
+        if following:
+            query = query.in_("user_id", followee_ids)
+        elif topics:
+            query = query.in_("declared_topic", topics)
+        return query.order("created_at", desc=True).limit(page_size).execute().data
+
+    posts = await asyncio.to_thread(read_page)
     if not posts:
         return {"posts": [], "next_cursor": None}
     # A full page means there may be more, and the cursor is where this page

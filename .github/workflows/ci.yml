@@ -22,10 +22,10 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
       # Only the pure-function tests run here (the publish gate, stuck
-      # posts, daily upload limits, usernames, error-report scrubbing) -- see docs/milestones/milestone-8c-ci.md for exactly
+      # posts, daily upload limits, usernames, error-report scrubbing, sign-in checks, cached interests) -- see docs/milestones/milestone-8c-ci.md for exactly
       # what's excluded and why (LLM-calling tests are slow/costly; the
       # Redis-backed queue test depends on a live external service).
-      - run: pytest tests/test_gate.py tests/test_stuck_posts.py tests/test_upload_limits.py tests/test_usernames.py tests/test_monitoring.py -v
+      - run: pytest tests/test_gate.py tests/test_stuck_posts.py tests/test_upload_limits.py tests/test_usernames.py tests/test_monitoring.py tests/test_auth.py tests/test_interests_cache.py -v
 
   frontend-build:
     name: Frontend type-check + build
