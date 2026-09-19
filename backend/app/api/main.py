@@ -24,6 +24,7 @@ from app.core.config import (
     get_allowed_origins,
     get_daily_post_limit,
     get_daily_video_limit,
+    get_feed_page_size,
     get_max_video_mb,
     get_report_hide_threshold,
     get_stuck_post_minutes,
@@ -252,6 +253,29 @@ async def create_post(
     return {"post_id": post_id, "status": "processing"}
 
 
+@app.get("/posts/status")
+async def posts_status(ids: str, user=Depends(get_current_user)):
+    """Where each of these posts of yours has got to -- a light check the app
+    makes in the background while something is still being verified (no video
+    links, nothing else). Also catches a post whose job got lost. Has to be
+    declared before /posts/{post_id}, which would otherwise take "status"
+    for a post id."""
+    post_ids = [i for i in ids.split(",") if i][:20]
+    if not post_ids:
+        return []
+    rows = (
+        get_supabase_client()
+        .table("posts")
+        .select("id,kind,declared_topic,status,queued_at")
+        .eq("user_id", user.id)
+        .in_("id", post_ids)
+        .execute()
+        .data
+    )
+    _fail_stuck_posts(rows)
+    return [{k: row[k] for k in ("id", "kind", "declared_topic", "status")} for row in rows]
+
+
 @app.get("/posts/{post_id}")
 async def get_post(post_id: str, user=Depends(get_current_user)):
     result = (
@@ -432,23 +456,37 @@ async def upload_avatar(avatar: UploadFile, user=Depends(get_current_user)):
 
 
 @app.get("/feed")
-async def get_feed(user=Depends(get_current_user)):
-    """Published posts from every user -- the shared feed, not just your own.
+async def get_feed(before: str | None = None, user=Depends(get_current_user)):
+    """One page of published posts from every user -- the shared feed, not
+    just your own -- newest first. `before` is the next_cursor from the
+    previous page: only posts older than that come back.
     Filtered to the caller's chosen interests once they've set any; an
     empty/unset preference list means "show everything", not "show
     nothing", so a brand-new user isn't met with an empty feed."""
+    if before is not None:
+        try:
+            datetime.fromisoformat(before)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="before must be a timestamp taken from a previous page")
+
     supabase = get_supabase_client()
+    page_size = get_feed_page_size()
 
     prefs = supabase.table("user_preferences").select("topics").eq("user_id", user.id).execute()
     topics = prefs.data[0]["topics"] if prefs.data else []
 
     query = supabase.table("posts").select("*").eq("status", "published")
+    if before:
+        query = query.lt("created_at", before)
     if topics:
         query = query.in_("declared_topic", topics)
-    result = query.order("created_at", desc=True).limit(50).execute()
-    posts = result.data
+    posts = query.order("created_at", desc=True).limit(page_size).execute().data
     if not posts:
-        return posts
+        return {"posts": [], "next_cursor": None}
+    # A full page means there may be more, and the cursor is where this page
+    # ended. Taken before any posts are filtered out below, so a page made of
+    # posts you've reported can't be mistaken for the end of the feed.
+    next_cursor = posts[-1]["created_at"] if len(posts) == page_size else None
 
     # The lookups below only need the posts just fetched, not each other --
     # run them at once instead of one after another, since each is a full
@@ -469,7 +507,7 @@ async def get_feed(user=Depends(get_current_user)):
         post["like_count"] = info.get("like_count", 0)
         post["liked_by_me"] = info.get("liked_by_me", False)
         post["uploader_avatar_url"] = avatars.get(post["user_id"])
-    return posts
+    return {"posts": posts, "next_cursor": next_cursor}
 
 
 REPORT_REASONS = {"misleading", "hateful", "dangerous", "spam", "other"}

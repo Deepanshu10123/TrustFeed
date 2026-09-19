@@ -29,6 +29,7 @@
   background: var(--bg);
 }
 .tab-btn {
+  position: relative;
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
   border: none; background: transparent; cursor: pointer;
   padding: 10px 0 12px; min-height: 56px;
@@ -36,6 +37,18 @@
 }
 .tab-btn.active { color: var(--text); }
 .tab-btn .label { font: 600 11px/1 'Public Sans', sans-serif; }
+.tab-dot {
+  position: absolute; top: 8px; left: calc(50% + 7px);
+  width: 9px; height: 9px; border-radius: 50%;
+  background: oklch(68% 0.22 18); border: 2px solid var(--bg); box-sizing: content-box;
+}
+.app-notice {
+  position: absolute; top: 12px; left: 12px; right: 12px; z-index: 40;
+  padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font: 600 13.5px/1.35 'Public Sans', sans-serif; text-align: left; cursor: pointer;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
 .loading-screen {
   height: 100vh; display: flex; align-items: center; justify-content: center;
   color: var(--text-secondary); font: 400 14px 'Public Sans', sans-serif;

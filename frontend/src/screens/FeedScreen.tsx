@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { addComment, deleteComment, getComments, getFeed, likePost, unlikePost } from '../lib/api'
+import { addComment, deleteComment, getComments, getFeed, likePost, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
@@ -7,6 +7,15 @@ import { EvidenceSheet } from './EvidenceSheet'
 import { ReportSheet } from './ReportSheet'
 import { FeedSkeleton } from './Skeletons'
 import './FeedScreen.css'
+
+// A page can come back empty while there's still more to see -- when every
+// post on it is one you've reported -- so keep going until something shows or
+// there's nothing left.
+async function fetchNonEmptyPage(before?: string): Promise<FeedPage> {
+  let page = await getFeed(before)
+  while (page.posts.length === 0 && page.next_cursor) page = await getFeed(page.next_cursor)
+  return page
+}
 
 // A stable-but-varied background per post -- shown behind the real
 // <video> while it loads, and as the only background for text posts.
@@ -206,9 +215,18 @@ export function FeedScreen() {
   // after a few seconds the placeholder says so instead of just sitting there.
   const [slow, setSlow] = useState(false)
 
+  // Where the next page starts (null once there's nothing older).
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const loadingMoreRef = useRef(false)
+  const loadMoreRef = useRef<() => void>(() => {})
+
   useEffect(() => {
-    getFeed()
-      .then(setPosts)
+    fetchNonEmptyPage()
+      .then((page) => {
+        setPosts(page.posts)
+        setCursor(page.next_cursor)
+      })
       .catch((e) => setError(e.message))
   }, [])
 
@@ -225,7 +243,13 @@ export function FeedScreen() {
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) setActiveIndex(Number((entry.target as HTMLElement).dataset.index))
+          if (!entry.isIntersecting) continue
+          const index = Number((entry.target as HTMLElement).dataset.index)
+          setActiveIndex(index)
+          // Getting close to the last post: fetch the next page now, so it's
+          // ready before you reach the end. (It does nothing if there's no
+          // next page or one is already on its way.)
+          if (index >= postCount - 3) loadMoreRef.current()
         }
       },
       { root, threshold: 0.6 },
@@ -246,6 +270,32 @@ export function FeedScreen() {
     setPosts((prev) => prev?.filter((p) => p.id !== postId) ?? prev)
     showToast("Thanks for reporting. It's off your feed now.")
   }
+
+  async function loadMore() {
+    if (!cursor || loadingMoreRef.current) return
+    loadingMoreRef.current = true
+    try {
+      const page = await fetchNonEmptyPage(cursor)
+      setPosts((prev) => {
+        const seen = new Set((prev ?? []).map((p) => p.id))
+        return [...(prev ?? []), ...page.posts.filter((p) => !seen.has(p.id))]
+      })
+      setCursor(page.next_cursor)
+      setLoadFailed(false)
+    } catch {
+      setLoadFailed(true)
+      showToast("Couldn't load more posts")
+    } finally {
+      loadingMoreRef.current = false
+    }
+  }
+
+  // The scroll observer above calls this through a ref, so it always gets the
+  // latest version. A failed attempt isn't retried until you scroll again (or
+  // press "Load more").
+  useEffect(() => {
+    loadMoreRef.current = loadMore
+  })
 
   function togglePause(postId: string) {
     setPausedIds((prev) => {
@@ -440,6 +490,27 @@ export function FeedScreen() {
           </div>
         )
       })}
+      <div className="feed-slide feed-end" data-index={posts.length}>
+        {!cursor ? (
+          <>
+            <p className="feed-end-title">You're all caught up</p>
+            <p className="feed-end-sub">New posts show up here first.</p>
+          </>
+        ) : loadFailed ? (
+          <button
+            className="feed-end-btn"
+            type="button"
+            onClick={() => {
+              setLoadFailed(false)
+              loadMore()
+            }}
+          >
+            Load more
+          </button>
+        ) : (
+          <p className="feed-end-title">Loading more...</p>
+        )}
+      </div>
     </div>
     {commentsPost && (
       <CommentsSheet post={commentsPost} currentUserId={session?.user.id} onClose={() => setCommentsPost(null)} />

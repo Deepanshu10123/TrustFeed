@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
+import { usePostWatcher } from './hooks/usePostWatcher'
+import type { PostStatusRow } from './lib/api'
 import { AuthScreen } from './screens/AuthScreen'
 import { FeedScreen } from './screens/FeedScreen'
 import { UploadScreen } from './screens/UploadScreen'
@@ -16,10 +18,42 @@ const HEADER_TITLES: Record<Tab, string> = {
   interests: 'Interests',
 }
 
+function finishedMessage(post: PostStatusRow): string {
+  const what = `${post.declared_topic} ${post.kind === 'video' ? 'video' : 'post'}`
+  switch (post.status) {
+    case 'published':
+      return `Your ${what} is live in the feed.`
+    case 'rejected':
+      return `Your ${what} wasn't published. Tap to see why.`
+    case 'needs_review':
+      return `Your ${what} needs a human look before it can be shown.`
+    case 'failed':
+      return `Something went wrong checking your ${what}. Tap to try again.`
+    default:
+      return `Your ${what} has been updated.`
+  }
+}
+
 function App() {
   const { session, loading, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('feed')
   const [myPostsRefresh, setMyPostsRefresh] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [unseen, setUnseen] = useState(0)
+
+  // Says so when a post you uploaded has been checked, wherever you are in
+  // the app -- otherwise you'd have to go and look in My Posts.
+  const { watch } = usePostWatcher((post) => {
+    if (tab === 'myposts') return // already looking at it -- My Posts shows the change itself
+    setNotice(finishedMessage(post))
+    setUnseen((n) => n + 1)
+  }, session !== null)
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(null), 7000)
+    return () => clearTimeout(timer)
+  }, [notice])
 
   if (loading) return <div className="loading-screen">Loading...</div>
   if (!session) return <AuthScreen />
@@ -52,8 +86,9 @@ function App() {
         {tab === 'feed' && <FeedScreen />}
         {tab === 'upload' && (
           <UploadScreen
-            onUploaded={() => {
+            onUploaded={(postId) => {
               setMyPostsRefresh((n) => n + 1)
+              watch(postId)
               setTab('myposts')
             }}
           />
@@ -79,14 +114,36 @@ function App() {
           </svg>
           <span className="label">Upload</span>
         </button>
-        <button className={`tab-btn ${tab === 'myposts' ? 'active' : ''}`} onClick={() => setTab('myposts')} type="button">
+        <button
+          className={`tab-btn ${tab === 'myposts' ? 'active' : ''}`}
+          onClick={() => {
+            setTab('myposts')
+            setUnseen(0)
+          }}
+          type="button"
+        >
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="8" r="3.5" />
             <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
           </svg>
+          {unseen > 0 && <span className="tab-dot" aria-label="New update" />}
           <span className="label">My Posts</span>
         </button>
       </div>
+
+      {notice && (
+        <button
+          className="app-notice"
+          type="button"
+          onClick={() => {
+            setNotice(null)
+            setUnseen(0)
+            setTab('myposts')
+          }}
+        >
+          {notice}
+        </button>
+      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import './UploadScreen.css'
 
 const CUSTOM_TOPIC = '__custom__'
 
-export function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
+export function UploadScreen({ onUploaded }: { onUploaded: (postId: string) => void }) {
   const [postType, setPostType] = useState<'text' | 'video'>('text')
   const [text, setText] = useState('')
   const [video, setVideo] = useState<File | null>(null)
@@ -68,18 +68,19 @@ export function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
     setSubmitting(true)
     setMessage(null)
     try {
+      let created: { post_id: string }
       if (postType === 'text') {
-        await createTextPost(finalTopic, text)
+        created = await createTextPost(finalTopic, text)
       } else {
         setProgress({ percent: 0, sent: false })
-        await createVideoPost(finalTopic, video as File, setProgress)
+        created = await createVideoPost(finalTopic, video as File, setProgress)
       }
       setMessage({ kind: 'success', text: 'Submitted -- check My Posts for its status.' })
       setText('')
       setVideo(null)
       setTopic('')
       setCustomTopic('')
-      onUploaded()
+      onUploaded(created.post_id)
     } catch (e) {
       setMessage({ kind: 'error', text: (e as Error).message })
     } finally {

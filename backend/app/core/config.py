@@ -80,6 +80,12 @@ def get_daily_video_limit() -> int:
     return _int_env("DAILY_VIDEO_LIMIT", 5)
 
 
+def get_feed_page_size() -> int:
+    """How many posts the feed loads at a time. 10 unless FEED_PAGE_SIZE says
+    otherwise -- set it to 2 for a moment to see paging with only a few posts."""
+    return _int_env("FEED_PAGE_SIZE", 10)
+
+
 def get_daily_post_limit() -> int:
     """Posts of any kind (text or video) one person can make in 24 hours.
     20 unless DAILY_POST_LIMIT says otherwise."""
