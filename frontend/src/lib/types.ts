@@ -56,3 +56,12 @@ export interface Post {
   uploader_avatar_url?: string | null
   uploader_username?: string | null
 }
+
+/** Someone's public profile, as seen by other people. */
+export interface UserProfile {
+  user_id: string
+  username: string | null
+  avatar_url: string | null
+  post_count: number
+  posts: Post[]
+}

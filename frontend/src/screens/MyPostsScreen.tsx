@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { deletePost, getMyPosts, getProfile, progressStreamUrl, retryPost, uploadAvatar } from '../lib/api'
 import type { Post, PostStatus } from '../lib/types'
 import { previewFor, suggestUsername, timeAgo } from '../lib/format'
 import { useAuth } from '../hooks/useAuth'
 import { ProfileSkeleton } from './Skeletons'
 import { UsernameSheet } from './UsernameSheet'
+import { VideoThumb } from './VideoThumb'
 import './MyPostsScreen.css'
 
 const POLL_INTERVAL_MS = 4000
@@ -44,26 +45,6 @@ function LiveProgress({ postId }: { postId: string }) {
   }, [postId])
 
   return <div className="status-sub">{message}</div>
-}
-
-/** A grid tile's video preview -- forcing currentTime forward a touch
- * once metadata loads makes the browser actually paint a real frame
- * instead of a blank black square, without needing canvas/CORS tricks. */
-function VideoThumb({ src }: { src: string }) {
-  const ref = useRef<HTMLVideoElement>(null)
-  return (
-    <video
-      ref={ref}
-      src={src}
-      className="grid-thumb-video"
-      muted
-      playsInline
-      preload="metadata"
-      onLoadedMetadata={() => {
-        if (ref.current) ref.current.currentTime = 0.1
-      }}
-    />
-  )
 }
 
 // The raw error isn't shown -- it's technical -- just which kind of failure.

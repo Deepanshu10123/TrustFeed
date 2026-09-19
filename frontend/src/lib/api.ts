@@ -4,7 +4,7 @@
  * own tokens, it only ever verifies the one Supabase already gave us.
  */
 import { supabase } from './supabase'
-import type { Comment, Post, PostKind, PostStatus } from './types'
+import type { Comment, Post, PostKind, PostStatus, UserProfile } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string
 
@@ -132,6 +132,10 @@ export interface FeedPage {
 
 export async function getFeed(before?: string): Promise<FeedPage> {
   return request(before ? `/feed?before=${encodeURIComponent(before)}` : '/feed')
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile> {
+  return request(`/users/${userId}`)
 }
 
 /** One published post, for someone opening a shared link. */

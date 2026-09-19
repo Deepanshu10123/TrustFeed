@@ -68,6 +68,7 @@
   display: flex; flex-direction: column; gap: 8px;
 }
 .creator-row { display: flex; align-items: center; gap: 8px; }
+.creator-link { display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: none; color: inherit; cursor: pointer; }
 .avatar {
   width: 30px; height: 30px; border-radius: 999px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
@@ -142,6 +143,10 @@ button.badge { cursor: pointer; }
   background: var(--bg); border-radius: 16px 16px 0 0;
   display: flex; flex-direction: column;
 }
+/* Tall enough for a profile: the picture and name, then a grid of posts. */
+.sheet.tall { height: 90%; }
+.user-handle { font: 700 17px/1.2 'Source Serif 4', serif; color: var(--text); overflow-wrap: anywhere; }
+.profile-avatar.static { cursor: default; }
 .sheet-header {
   flex: none; display: flex; align-items: center; justify-content: space-between;
   padding: 16px 18px; border-bottom: 1px solid var(--border);
@@ -163,6 +168,8 @@ button.badge { cursor: pointer; }
 .comment-body { flex: 1; min-width: 0; }
 .comment-meta { display: flex; align-items: baseline; gap: 8px; }
 .comment-handle { font: 600 13px/1 'Public Sans', sans-serif; color: var(--text); }
+.comment-link { padding: 0; border: none; background: none; cursor: pointer; text-align: left; }
+.comment-link:hover { text-decoration: underline; }
 .comment-time { font: 500 11px/1 'Public Sans', sans-serif; color: var(--text-tertiary); }
 .comment-text { margin-top: 3px; font: 400 13.5px/1.4 'Public Sans', sans-serif; color: var(--text); }
 .comment-delete {

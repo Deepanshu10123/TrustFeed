@@ -6,6 +6,7 @@ import { shareUrlFor } from '../lib/shareLink'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import { EvidenceSheet } from './EvidenceSheet'
 import { ReportSheet } from './ReportSheet'
+import { UserProfileSheet } from './UserProfileSheet'
 import { FeedSkeleton } from './Skeletons'
 import './FeedScreen.css'
 
@@ -108,10 +109,12 @@ function CommentsSheet({
   post,
   currentUserId,
   onClose,
+  onOpenProfile,
 }: {
   post: Post
   currentUserId: string | undefined
   onClose: () => void
+  onOpenProfile: (userId: string) => void
 }) {
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -170,7 +173,9 @@ function CommentsSheet({
               <span className="comment-avatar">{handleForUser(c.user_id, c.username).charAt(1).toUpperCase()}</span>
               <div className="comment-body">
                 <div className="comment-meta">
-                  <span className="comment-handle">{handleForUser(c.user_id, c.username)}</span>
+                  <button className="comment-handle comment-link" type="button" onClick={() => onOpenProfile(c.user_id)}>
+                    {handleForUser(c.user_id, c.username)}
+                  </button>
                   <span className="comment-time">{timeAgo(c.created_at)}</span>
                 </div>
                 <div className="comment-text">{c.text}</div>
@@ -218,6 +223,7 @@ export function FeedScreen({
   const [commentsPost, setCommentsPost] = useState<Post | null>(null)
   const [evidencePost, setEvidencePost] = useState<Post | null>(null)
   const [reportingPost, setReportingPost] = useState<Post | null>(null)
+  const [profileUserId, setProfileUserId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [pausedIds, setPausedIds] = useState<Set<string>>(() => new Set())
   // Only one caption is open at a time -- opening another closes this one.
@@ -292,6 +298,29 @@ export function FeedScreen({
     setReportingPost(null)
     setPosts((prev) => prev?.filter((p) => p.id !== postId) ?? prev)
     showToast("Thanks for reporting. It's off your feed now.")
+  }
+
+  function scrollToSlide(index: number) {
+    scrollRef.current?.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: 'start' })
+  }
+
+  // Tapping a post on someone's profile: jump to it if it's already in the
+  // feed, otherwise put it on top (as a shared link does) and go there.
+  async function openPostFromProfile(postId: string) {
+    setProfileUserId(null)
+    const at = posts?.findIndex((p) => p.id === postId) ?? -1
+    if (at >= 0) {
+      scrollToSlide(at)
+      return
+    }
+    try {
+      const post = await getSharedPost(postId)
+      setPosts((prev) => [post, ...(prev ?? []).filter((p) => p.id !== post.id)])
+      setActiveIndex(0)
+      setTimeout(() => scrollToSlide(0), 0)
+    } catch {
+      showToast("That post isn't available any more.")
+    }
   }
 
   async function loadMore() {
@@ -471,6 +500,7 @@ export function FeedScreen({
 
             <div className="bottom-info">
               <div className="creator-row">
+                <button className="creator-link" type="button" onClick={() => setProfileUserId(post.user_id)}>
                 <span className="avatar">
                   {post.uploader_avatar_url ? (
                     <img src={post.uploader_avatar_url} alt="" />
@@ -479,6 +509,7 @@ export function FeedScreen({
                   )}
                 </span>
                 <span className="handle">{uploaderHandle(post)}</span>
+                </button>
                 <span className="posted-ago">{timeAgo(post.created_at)}</span>
               </div>
               <div className="tag-row">
@@ -536,7 +567,18 @@ export function FeedScreen({
       </div>
     </div>
     {commentsPost && (
-      <CommentsSheet post={commentsPost} currentUserId={session?.user.id} onClose={() => setCommentsPost(null)} />
+      <CommentsSheet
+        post={commentsPost}
+        currentUserId={session?.user.id}
+        onClose={() => setCommentsPost(null)}
+        onOpenProfile={(userId) => {
+          setCommentsPost(null)
+          setProfileUserId(userId)
+        }}
+      />
+    )}
+    {profileUserId && (
+      <UserProfileSheet userId={profileUserId} onClose={() => setProfileUserId(null)} onOpenPost={openPostFromProfile} />
     )}
     {evidencePost && <EvidenceSheet post={evidencePost} onClose={() => setEvidencePost(null)} />}
     {reportingPost && (

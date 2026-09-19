@@ -168,6 +168,37 @@ async def _decorate_posts(posts: list[dict], user_id: str) -> set[str]:
     return reported
 
 
+PROFILE_POSTS_LIMIT = 60  # a profile shows someone's latest posts; no paging yet
+
+
+def _published_posts(user_id: str) -> list[dict]:
+    """A person's latest published posts -- just the columns a profile grid
+    needs, not the (much bigger) verification report."""
+    return (
+        get_supabase_client()
+        .table("posts")
+        .select("id,user_id,kind,content,declared_topic,created_at")
+        .eq("user_id", user_id)
+        .eq("status", "published")
+        .order("created_at", desc=True)
+        .limit(PROFILE_POSTS_LIMIT)
+        .execute()
+        .data
+    )
+
+
+def _published_count(user_id: str) -> int:
+    result = (
+        get_supabase_client()
+        .table("posts")
+        .select("id", count="exact", head=True)
+        .eq("user_id", user_id)
+        .eq("status", "published")
+        .execute()
+    )
+    return result.count or 0
+
+
 # The frontend (Vite dev server locally, a deployed Vercel origin in
 # production) runs on a different origin than this API, so the browser
 # needs explicit permission to call it -- see get_allowed_origins().
@@ -561,6 +592,35 @@ async def get_shared_post(post_id: str, user=Depends(get_current_user)):
         raise unavailable
     await _decorate_posts(rows, user.id)
     return rows[0]
+
+
+@app.get("/users/{user_id}")
+async def get_user_profile(user_id: str, user=Depends(get_current_user)):
+    """Someone's public profile: their name and picture, how many posts
+    they've published, and those posts, newest first. Anyone signed in can
+    look -- it shows only what the shared feed already does."""
+    unavailable = HTTPException(status_code=404, detail="That profile isn't available.")
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        raise unavailable
+
+    posts, post_count, profiles = await asyncio.gather(
+        asyncio.to_thread(_published_posts, user_id),
+        asyncio.to_thread(_published_count, user_id),
+        _optional("profiles", {}, _profiles, [user_id]),
+    )
+    profile = profiles.get(user_id, {})
+    if not posts and not profile:
+        raise unavailable  # nobody by that id has ever posted or set up a profile
+    await asyncio.to_thread(_attach_video_urls, posts)
+    return {
+        "user_id": user_id,
+        "username": profile.get("username"),
+        "avatar_url": profile.get("avatar_url"),
+        "post_count": post_count,
+        "posts": posts,
+    }
 
 
 REPORT_REASONS = {"misleading", "hateful", "dangerous", "spam", "other"}
