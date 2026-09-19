@@ -39,3 +39,34 @@ create table comments (
   text text not null,
   created_at timestamptz not null default now()
 );
+
+-- Likes: one row per (post, user). The composite primary key is what stops
+-- the same person liking the same post twice, so the count is always
+-- "how many different people".
+create table likes (
+  post_id uuid not null references posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+
+-- Like count + "did this user like it" for a whole batch of posts in one
+-- round trip (called by the API's GET /feed and the like/unlike endpoints).
+create or replace function like_info(post_ids uuid[], me uuid)
+returns table (post_id uuid, like_count bigint, liked_by_me boolean)
+language sql stable
+as $$
+  select p.id, count(l.user_id), coalesce(bool_or(l.user_id = me), false)
+  from unnest(post_ids) as p(id)
+  left join likes l on l.post_id = p.id
+  group by p.id
+$$;
+
+-- Lock these tables down: the frontend only ever uses Supabase for login,
+-- and every read/write goes through this project's API (service-role key,
+-- which bypasses RLS). With RLS on and no policies, the public anon key that
+-- ships in the frontend can't read or write them directly. Safe to run on
+-- tables that already have it enabled.
+alter table likes enable row level security;
+alter table comments enable row level security;
+alter table user_preferences enable row level security;

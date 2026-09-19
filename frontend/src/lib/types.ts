@@ -49,4 +49,8 @@ export interface Post {
   rejection_reason: string | null
   report: Report | null
   created_at: string
+  // Only present on posts that come from the shared feed.
+  like_count?: number
+  liked_by_me?: boolean
+  uploader_avatar_url?: string | null
 }

@@ -7,6 +7,7 @@ Run it:
     uvicorn app.api.main:app --reload
 """
 
+import asyncio
 import os
 import tempfile
 import uuid
@@ -50,6 +51,34 @@ def _attach_video_urls(posts: list[dict]) -> list[dict]:
         if post["kind"] == "video":
             post["video_url"] = url_by_path.get(post["content"])
     return posts
+
+
+def _like_info(post_ids: list[str], user_id: str) -> dict[str, dict]:
+    """like_count and liked_by_me for a batch of posts in one database
+    call (the like_info() function in schema.sql), keyed by post id."""
+    if not post_ids:
+        return {}
+    rows = get_supabase_client().rpc("like_info", {"post_ids": post_ids, "me": user_id}).execute().data
+    return {row["post_id"]: row for row in rows}
+
+
+def _like_state(post_id: str, user_id: str) -> dict:
+    info = _like_info([post_id], user_id).get(post_id, {})
+    return {"liked": info.get("liked_by_me", False), "like_count": info.get("like_count", 0)}
+
+
+def _avatar_urls(user_ids: list[str]) -> dict[str, str | None]:
+    """Uploader avatars for a batch of users in one query -- users who
+    never set one simply aren't in the result."""
+    rows = (
+        get_supabase_client()
+        .table("user_preferences")
+        .select("user_id,avatar_url")
+        .in_("user_id", user_ids)
+        .execute()
+        .data
+    )
+    return {row["user_id"]: row["avatar_url"] for row in rows}
 
 # The frontend (Vite dev server locally, a deployed Vercel origin in
 # production) runs on a different origin than this API, so the browser
@@ -302,8 +331,52 @@ async def get_feed(user=Depends(get_current_user)):
     if topics:
         query = query.in_("declared_topic", topics)
     result = query.order("created_at", desc=True).limit(50).execute()
+    posts = result.data
+    if not posts:
+        return posts
 
-    return _attach_video_urls(result.data)
+    # The three lookups below only need the posts just fetched, not each
+    # other -- run them at once instead of one after another, since each is
+    # a full round trip to a database on the other side of the world.
+    post_ids = [p["id"] for p in posts]
+    user_ids = list({p["user_id"] for p in posts})
+
+    async def like_info_or_empty() -> dict[str, dict]:
+        # Likes are an add-on to the feed, not a reason for the feed itself
+        # to fail (e.g. if the like_info() SQL hasn't been run yet).
+        try:
+            return await asyncio.to_thread(_like_info, post_ids, user.id)
+        except Exception as e:
+            print(f"[likes] couldn't load like info: {e}", flush=True)
+            return {}
+
+    like_info, avatars, _ = await asyncio.gather(
+        like_info_or_empty(),
+        asyncio.to_thread(_avatar_urls, user_ids),
+        asyncio.to_thread(_attach_video_urls, posts),
+    )
+    for post in posts:
+        info = like_info.get(post["id"], {})
+        post["like_count"] = info.get("like_count", 0)
+        post["liked_by_me"] = info.get("liked_by_me", False)
+        post["uploader_avatar_url"] = avatars.get(post["user_id"])
+    return posts
+
+
+@app.put("/posts/{post_id}/like")
+async def like_post(post_id: str, user=Depends(get_current_user)):
+    # (post_id, user_id) is the table's primary key, so liking something
+    # you've already liked is a harmless no-op rather than a second like.
+    get_supabase_client().table("likes").upsert(
+        {"post_id": post_id, "user_id": user.id}, on_conflict="post_id,user_id", ignore_duplicates=True
+    ).execute()
+    return _like_state(post_id, user.id)
+
+
+@app.delete("/posts/{post_id}/like")
+async def unlike_post(post_id: str, user=Depends(get_current_user)):
+    get_supabase_client().table("likes").delete().eq("post_id", post_id).eq("user_id", user.id).execute()
+    return _like_state(post_id, user.id)
 
 
 @app.get("/posts/{post_id}/comments")

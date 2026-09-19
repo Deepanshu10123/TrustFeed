@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { addComment, deleteComment, getComments, getFeed } from '../lib/api'
+import { addComment, deleteComment, getComments, getFeed, likePost, unlikePost } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
 import { captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
@@ -24,16 +24,21 @@ function bgStyleFor(postId: string): React.CSSProperties {
  * feed -- otherwise every video in the feed would play at once. Starts
  * muted because browsers block autoplay-with-sound outright; `muted` is
  * set imperatively (not just as a JSX prop) since browsers don't reliably
- * react to that prop changing on an already-playing video. */
-function VideoBackground({ src, muted }: { src: string; muted: boolean }) {
+ * react to that prop changing on an already-playing video. `paused` is the
+ * viewer's own choice via the pause button -- it holds the video still even
+ * while its slide is on screen. */
+function VideoBackground({ src, muted, paused }: { src: string; muted: boolean; paused: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
+  const visibleRef = useRef(false)
+  const pausedRef = useRef(paused)
 
   useEffect(() => {
     const video = ref.current
     if (!video) return
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) video.play().catch(() => {})
+        visibleRef.current = entry.isIntersecting
+        if (entry.isIntersecting && !pausedRef.current) video.play().catch(() => {})
         else video.pause()
       },
       { threshold: 0.6 },
@@ -41,6 +46,14 @@ function VideoBackground({ src, muted }: { src: string; muted: boolean }) {
     observer.observe(video)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    pausedRef.current = paused
+    const video = ref.current
+    if (!video) return
+    if (paused) video.pause()
+    else if (visibleRef.current) video.play().catch(() => {})
+  }, [paused])
 
   useEffect(() => {
     if (ref.current) ref.current.muted = muted
@@ -169,6 +182,12 @@ export function FeedScreen() {
   const [muted, setMuted] = useState(true)
   const [commentsPost, setCommentsPost] = useState<Post | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [pausedIds, setPausedIds] = useState<Set<string>>(() => new Set())
+  // Only one caption is open at a time -- opening another closes this one.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Posts with a like request still in flight, so a fast double-tap can't
+  // send two requests that race each other.
+  const pendingLikes = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     getFeed()
@@ -179,6 +198,40 @@ export function FeedScreen() {
   function showToast(message: string) {
     setToast(message)
     setTimeout(() => setToast(null), 2200)
+  }
+
+  function togglePause(postId: string) {
+    setPausedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(postId)) next.delete(postId)
+      else next.add(postId)
+      return next
+    })
+  }
+
+  function setLikeState(postId: string, liked: boolean, count: number) {
+    setPosts((prev) => prev?.map((p) => (p.id === postId ? { ...p, liked_by_me: liked, like_count: count } : p)) ?? prev)
+  }
+
+  // Updates the heart and count immediately, then reconciles with what the
+  // server says (its count is the real one -- other people may have liked
+  // in the meantime) or puts things back if the request failed.
+  async function toggleLike(post: Post) {
+    if (pendingLikes.current.has(post.id)) return
+    pendingLikes.current.add(post.id)
+
+    const wasLiked = post.liked_by_me ?? false
+    const before = post.like_count ?? 0
+    setLikeState(post.id, !wasLiked, Math.max(0, before + (wasLiked ? -1 : 1)))
+    try {
+      const result = await (wasLiked ? unlikePost(post.id) : likePost(post.id))
+      setLikeState(post.id, result.liked, result.like_count)
+    } catch {
+      setLikeState(post.id, wasLiked, before)
+      showToast("Couldn't update your like")
+    } finally {
+      pendingLikes.current.delete(post.id)
+    }
   }
 
   // No per-post URLs exist yet (this app has no router -- see Milestone
@@ -215,17 +268,33 @@ export function FeedScreen() {
       {posts.map((post) => {
         const verdict = summarizeVerdict(post.report?.report?.verdicts ?? [])
         const badgeClass = verdict ? BADGE_CLASS[verdict.label] : 'unable'
+        // What the collapsed caption shows: the video's transcript, or for a
+        // text post (whose text is already the big quote) the verdict's
+        // explanation. Opening it reveals everything.
+        const caption = post.kind === 'video' ? captionFor(post) : ''
+        const explanation = verdict?.explanation ?? post.report?.report?.summary ?? ''
+        const preview = caption || explanation
+        const hasMore = (caption !== '' && explanation !== '') || preview.length > 60
+        const expanded = expandedId === post.id
+        const paused = pausedIds.has(post.id)
+        const liked = post.liked_by_me ?? false
         return (
-          <div key={post.id} className="feed-slide" style={bgStyleFor(post.id)}>
+          <div key={post.id} className={`feed-slide${expanded ? ' expanded' : ''}`} style={bgStyleFor(post.id)}>
             {post.kind === 'text' && <div className="slide-quote">&ldquo;{post.content}&rdquo;</div>}
-            {post.kind === 'video' && post.video_url && <VideoBackground src={post.video_url} muted={muted} />}
+            {post.kind === 'video' && post.video_url && <VideoBackground src={post.video_url} muted={muted} paused={paused} />}
             <div className="slide-scrim" />
 
             <div className="top-controls">
               <div className="pill-group">
-                <button className="icon-pill" type="button" aria-label="Pause">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-                </button>
+                {post.kind === 'video' && (
+                  <button className="icon-pill" type="button" aria-label={paused ? 'Play' : 'Pause'} onClick={() => togglePause(post.id)}>
+                    {paused ? (
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                    )}
+                  </button>
+                )}
                 <button className="icon-pill" type="button" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted((m) => !m)}>
                   {muted ? (
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4z" /><line x1="16" y1="9" x2="21" y2="15" /><line x1="21" y1="9" x2="16" y2="15" /></svg>
@@ -240,10 +309,17 @@ export function FeedScreen() {
             </div>
 
             <div className="side-rail">
-              <button className="rail-btn" type="button">
+              <button
+                className={`rail-btn${liked ? ' liked' : ''}`}
+                type="button"
+                aria-pressed={liked}
+                aria-label={liked ? 'Unlike' : 'Like'}
+                onClick={() => toggleLike(post)}
+              >
                 <span className="circle">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.4-9.5-8.7C.8 8 2 4.5 5.2 4c2-.3 3.8.7 4.8 2.3C11 4.7 12.8 3.7 14.8 4c3.2.5 4.4 4 3.7 7.3C16 15.6 12 20 12 20z" /></svg>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.4-9.5-8.7C.8 8 2 4.5 5.2 4c2-.3 3.8.7 4.8 2.3C11 4.7 12.8 3.7 14.8 4c3.2.5 4.4 4 3.7 7.3C16 15.6 12 20 12 20z" /></svg>
                 </span>
+                <span className="count">{post.like_count ?? 0}</span>
               </button>
               <button className="rail-btn" type="button" onClick={() => setCommentsPost(post)}>
                 <span className="circle">
@@ -260,18 +336,36 @@ export function FeedScreen() {
 
             <div className="bottom-info">
               <div className="creator-row">
-                <span className="avatar">{uploaderHandle(post).charAt(1).toUpperCase()}</span>
+                <span className="avatar">
+                  {post.uploader_avatar_url ? (
+                    <img src={post.uploader_avatar_url} alt="" />
+                  ) : (
+                    uploaderHandle(post).charAt(1).toUpperCase()
+                  )}
+                </span>
                 <span className="handle">{uploaderHandle(post)}</span>
+                <span className="posted-ago">{timeAgo(post.created_at)}</span>
               </div>
-              <span className="topic-chip">{post.declared_topic}</span>
-              {post.kind === 'video' && <div className="caption">{captionFor(post)}</div>}
-              <div className="verdict-row">
+              <div className="tag-row">
+                <span className="topic-chip">{post.declared_topic}</span>
                 <span className={`badge ${badgeClass}`}>{verdict?.label ?? 'No factual claims'}</span>
-                <div className="verdict-explanation">
-                  {verdict?.explanation ?? post.report?.report?.summary ?? ''}
-                </div>
               </div>
-              <div className="verdict-explanation">{timeAgo(post.created_at)}</div>
+              {expanded ? (
+                <div className="post-text">
+                  {caption && <div className="caption">{caption}</div>}
+                  {explanation && <div className="verdict-explanation">{explanation}</div>}
+                  <button className="more-btn" type="button" onClick={() => setExpandedId(null)}>
+                    less
+                  </button>
+                </div>
+              ) : hasMore ? (
+                <button className="post-text-btn" type="button" onClick={() => setExpandedId(post.id)}>
+                  <span className="caption clamped">{preview}</span>
+                  <span className="more-btn">more</span>
+                </button>
+              ) : (
+                preview && <div className="caption">{preview}</div>
+              )}
             </div>
           </div>
         )

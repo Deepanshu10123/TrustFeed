@@ -75,6 +75,14 @@ export async function getFeed(): Promise<Post[]> {
   return request('/feed')
 }
 
+export async function likePost(postId: string): Promise<{ liked: boolean; like_count: number }> {
+  return request(`/posts/${postId}/like`, { method: 'PUT' })
+}
+
+export async function unlikePost(postId: string): Promise<{ liked: boolean; like_count: number }> {
+  return request(`/posts/${postId}/like`, { method: 'DELETE' })
+}
+
 export async function getComments(postId: string): Promise<Comment[]> {
   return request(`/posts/${postId}/comments`)
 }
