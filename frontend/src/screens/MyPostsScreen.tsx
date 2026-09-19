@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { deletePost, getMyPosts, getProfile, progressStreamUrl, retryPost, uploadAvatar } from '../lib/api'
 import type { Post, PostStatus } from '../lib/types'
 import { previewFor, suggestUsername, timeAgo } from '../lib/format'
+import { forgetSavedFeed } from '../lib/feedCache'
+import { savedProfile, saveProfile } from '../lib/myProfileCache'
 import { useAuth } from '../hooks/useAuth'
 import { ProfileSkeleton } from './Skeletons'
 import { UsernameSheet } from './UsernameSheet'
@@ -70,27 +72,42 @@ function StatusBadge({ status }: { status: PostStatus }) {
   return <span className="status-badge failed">Failed</span>
 }
 
-export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
-  const [posts, setPosts] = useState<Post[] | null>(null)
+export function MyPostsScreen({ userId, refreshSignal }: { userId: string; refreshSignal: number }) {
+  // What this screen showed last time, if nothing has changed since. It opens
+  // with that, and the fresh data (fetched below either way) is swapped in.
+  const [saved] = useState(() => savedProfile(userId, refreshSignal))
+  const [posts, setPosts] = useState<Post[] | null>(saved?.posts ?? null)
   const [error, setError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const { session } = useAuth()
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [username, setUsernameValue] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(saved?.avatarUrl ?? null)
+  const [username, setUsernameValue] = useState<string | null>(saved?.username ?? null)
   // null until the server has said -- shown as a dash, not as a made-up 0
-  const [followerCount, setFollowerCount] = useState<number | null>(null)
-  const [followingCount, setFollowingCount] = useState<number | null>(null)
+  const [followerCount, setFollowerCount] = useState<number | null>(saved?.followerCount ?? null)
+  const [followingCount, setFollowingCount] = useState<number | null>(saved?.followingCount ?? null)
   const [editingUsername, setEditingUsername] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [selected, setSelected] = useState<Post | null>(null)
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
+  // Something is already on screen, so a refresh that fails shouldn't wipe it.
+  const hasContent = useRef(saved !== null)
 
   const load = useCallback(() => {
     getMyPosts()
-      .then(setPosts)
-      .catch((e) => setError(e.message))
+      .then((fresh) => {
+        hasContent.current = true
+        setPosts(fresh)
+      })
+      .catch((e) => {
+        if (!hasContent.current) setError(e.message)
+      })
   }, [])
+
+  // Keep the copy for next time up to date with whatever is on screen.
+  useEffect(() => {
+    if (posts) saveProfile(userId, refreshSignal, { posts, avatarUrl, username, followerCount, followingCount })
+  }, [userId, refreshSignal, posts, avatarUrl, username, followerCount, followingCount])
 
   useEffect(() => {
     load()
@@ -160,6 +177,7 @@ export function MyPostsScreen({ refreshSignal }: { refreshSignal: number }) {
     setDeleteError(null)
     try {
       await deletePost(postId)
+      forgetSavedFeed() // it may be in the feed you left -- load that again too
       load()
     } catch (e) {
       setDeleteError((e as Error).message)

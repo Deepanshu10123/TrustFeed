@@ -1,11 +1,15 @@
+import { Loader } from './Loader'
 import './Skeletons.css'
 
 /** Stand-in shapes shown while the feed loads, laid out like the real thing
- * so nothing jumps when it arrives. `slow` adds a note for the long first
- * load after the server has been asleep. */
+ * so nothing jumps when it arrives, with the loading animation in the middle.
+ * `slow` adds a note for the long first load after the server has been asleep. */
 export function FeedSkeleton({ slow }: { slow: boolean }) {
   return (
     <div className="sk-feed" role="status" aria-label="Loading the feed">
+      <div className="sk-center">
+        <Loader note={slow ? 'Still loading. The server may be waking up, which can take up to a minute after a quiet spell.' : undefined} />
+      </div>
       <div className="sk-rail">
         <span className="sk sk-circle" />
         <span className="sk sk-circle" />
@@ -19,11 +23,6 @@ export function FeedSkeleton({ slow }: { slow: boolean }) {
         <span className="sk sk-line" style={{ width: '46%', height: 22 }} />
         <span className="sk sk-line" style={{ width: '88%' }} />
         <span className="sk sk-line" style={{ width: '64%' }} />
-        {slow && (
-          <p className="sk-note">
-            Still loading. The server may be waking up, which can take up to a minute after a quiet spell.
-          </p>
-        )}
       </div>
     </div>
   )

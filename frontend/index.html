@@ -28,7 +28,19 @@
     <meta name="twitter:image" content="https://trust-feed-livid.vercel.app/og-image.png" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Shown while the app's code downloads; React replaces it the moment it
+           starts. Same markup as the Loader component (src/screens/Loader.tsx). -->
+      <div class="splash" role="status" aria-label="Loading TrustFeed">
+        <div class="loader">
+          <svg class="loader-mark" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle class="loader-ring" cx="32" cy="32" r="27" pathLength="1"></circle>
+            <path class="loader-check" d="M20 33.5l8.5 8.5L44 24" pathLength="1"></path>
+          </svg>
+          <div class="loader-word">TrustFeed</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

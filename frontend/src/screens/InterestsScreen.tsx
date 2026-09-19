@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getInterests, setInterests } from '../lib/api'
+import { forgetSavedFeed } from '../lib/feedCache'
 import { TOPICS } from '../lib/topics'
 import './InterestsScreen.css'
 
@@ -28,6 +29,7 @@ export function InterestsScreen() {
   async function handleSave() {
     setSaving(true)
     await setInterests([...selected])
+    forgetSavedFeed() // the feed you left is filtered by the old interests -- load it again
     setSaving(false)
     setSaved(true)
   }

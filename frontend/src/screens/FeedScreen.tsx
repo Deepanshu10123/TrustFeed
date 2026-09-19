@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { addComment, deleteComment, getComments, getFeed, getSharedPost, likePost, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import type { Comment, Post } from '../lib/types'
+import { forgetSavedFeed, savedFeed, saveFeed, type FeedMode } from '../lib/feedCache'
 import { shareUrlFor } from '../lib/shareLink'
 import { badgeClassFor, captionFor, handleForUser, summarizeVerdict, timeAgo, uploaderHandle } from '../lib/format'
 import { EvidenceSheet } from './EvidenceSheet'
@@ -30,8 +31,6 @@ async function fetchFirstScreen(sharedPostId: string | null, following: boolean)
   const posts = shared ? [shared, ...page.posts.filter((p) => p.id !== shared.id)] : page.posts
   return { posts, nextCursor: page.next_cursor, sharedMissing: sharedPostId !== null && shared === null }
 }
-
-type FeedMode = 'all' | 'following'
 
 /** "For you" (everyone, filtered by your interests) or "Following" (only the
  * people you follow), floating over the top of the feed. */
@@ -77,6 +76,9 @@ function VideoBackground({
   const ref = useRef<HTMLVideoElement>(null)
   const visibleRef = useRef(false)
   const pausedRef = useRef(paused)
+  // Whether there's a picture yet -- until then (or if it stalls) a small ring
+  // turns, so a slow connection doesn't look like a dead screen.
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
 
   useEffect(() => {
     const video = ref.current
@@ -106,15 +108,22 @@ function VideoBackground({
   }, [muted])
 
   return (
-    <video
-      ref={ref}
-      src={src}
-      preload={preload}
-      muted
-      loop
-      playsInline
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-    />
+    <>
+      <video
+        ref={ref}
+        src={src}
+        preload={preload}
+        muted
+        loop
+        playsInline
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        onLoadedData={() => setStatus('ready')}
+        onPlaying={() => setStatus('ready')}
+        onWaiting={() => setStatus('loading')}
+        onError={() => setStatus('failed')}
+      />
+      {status === 'loading' && <span className="video-loading" aria-hidden="true" />}
+    </>
   )
 }
 
@@ -224,14 +233,20 @@ function CommentsSheet({
 }
 
 export function FeedScreen({
+  userId,
   sharedPostId,
   onSharedHandled,
 }: {
+  userId: string
   sharedPostId: string | null
   onSharedHandled: () => void
 }) {
   const { session } = useAuth()
-  const [posts, setPosts] = useState<Post[] | null>(null)
+  // Coming back from another tab: the feed as it was left, so it reopens at the
+  // same reel. A shared link always wins -- that post has to be shown first.
+  const [restored] = useState(() => (sharedPostId ? null : savedFeed(userId)))
+  const [posts, setPosts] = useState<Post[] | null>(restored?.posts ?? null)
+  const feedStartedAt = useRef(restored?.startedAt ?? Date.now())
   const [error, setError] = useState<string | null>(null)
   // Shared across all slides -- only one video plays at a time, and a
   // sound preference that persists as you swipe matches how every
@@ -251,19 +266,19 @@ export function FeedScreen({
 
   // Which slide is on screen, so only the videos next to it are loaded --
   // without this the feed starts fetching all 50 at once.
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [activeIndex, setActiveIndex] = useState(restored ? Math.min(restored.activeIndex, restored.posts.length) : 0)
   const scrollRef = useRef<HTMLDivElement>(null)
   // The first load after the server has been asleep can take up to a minute;
   // after a few seconds the placeholder says so instead of just sitting there.
   const [slow, setSlow] = useState(false)
 
   // Where the next page starts (null once there's nothing older).
-  const [cursor, setCursor] = useState<string | null>(null)
+  const [cursor, setCursor] = useState<string | null>(restored?.cursor ?? null)
   const [loadFailed, setLoadFailed] = useState(false)
   const loadingMoreRef = useRef(false)
   const loadMoreRef = useRef<() => void>(() => {})
 
-  const [mode, setMode] = useState<FeedMode>('all')
+  const [mode, setMode] = useState<FeedMode>(restored?.mode ?? 'all')
   const modeRef = useRef(mode)
   useEffect(() => {
     modeRef.current = mode
@@ -272,13 +287,15 @@ export function FeedScreen({
   // Loads the first screen when the feed opens, and again each time you switch
   // between "For you" and "Following". `sharedPostId` is only ever the link the
   // app was opened with (cleared as soon as it's been used) and only applies
-  // to "For you".
+  // to "For you". Nothing to load when the feed was restored from a saved copy.
   useEffect(() => {
+    if (posts !== null) return
     let cancelled = false
     const sharedForThisFeed = mode === 'all' ? sharedPostId : null
     fetchFirstScreen(sharedForThisFeed, mode === 'following')
       .then(({ posts, nextCursor, sharedMissing }) => {
         if (cancelled) return
+        feedStartedAt.current = Date.now()
         setPosts(posts)
         setCursor(nextCursor)
         if (sharedForThisFeed) onSharedHandled()
@@ -297,6 +314,20 @@ export function FeedScreen({
     const timer = setTimeout(() => setSlow(true), 6000)
     return () => clearTimeout(timer)
   }, [posts, error])
+
+  // Back at the reel you left: jump straight to it, before the first paint, so
+  // there's no flash of the top of the feed.
+  useLayoutEffect(() => {
+    if (restored && restored.activeIndex > 0) scrollToSlide(Math.min(restored.activeIndex, restored.posts.length))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the saved copy in step with what's on screen (an empty feed isn't
+  // worth going back to -- and it may just have had its last post reported).
+  useEffect(() => {
+    if (posts === null) return
+    if (posts.length === 0) forgetSavedFeed()
+    else saveFeed(userId, { startedAt: feedStartedAt.current, mode, posts, cursor, activeIndex })
+  }, [userId, mode, posts, cursor, activeIndex])
 
   const postCount = posts?.length ?? 0
   useEffect(() => {

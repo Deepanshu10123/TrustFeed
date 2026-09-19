@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { usePostWatcher } from './hooks/usePostWatcher'
 import type { PostStatusRow } from './lib/api'
+import { loadSavedTab, rememberTab, type Tab } from './lib/savedTab'
 import { clearSharedPostId, takeSharedPostId } from './lib/shareLink'
 import { AuthScreen } from './screens/AuthScreen'
 import { FeedScreen } from './screens/FeedScreen'
+import { Splash } from './screens/Loader'
 import { UploadScreen } from './screens/UploadScreen'
 import { MyPostsScreen } from './screens/MyPostsScreen'
 import { InterestsScreen } from './screens/InterestsScreen'
 import './App.css'
-
-type Tab = 'feed' | 'upload' | 'myposts' | 'interests'
 
 // Someone who opened a shared link: the post to show first once they're in.
 // Read once, as the app loads, before anything can change the address.
@@ -41,7 +41,9 @@ function finishedMessage(post: PostStatusRow): string {
 
 function App() {
   const { session, loading, signOut } = useAuth()
-  const [tab, setTab] = useState<Tab>('feed')
+  // A reload comes back to the tab you were on -- except when someone has just
+  // opened a shared link, which has to land on the feed.
+  const [tab, setTab] = useState<Tab>(() => (initialSharedPostId ? 'feed' : loadSavedTab()))
   const [myPostsRefresh, setMyPostsRefresh] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const [unseen, setUnseen] = useState(0)
@@ -51,6 +53,7 @@ function App() {
   // the app -- otherwise you'd have to go and look in My Posts.
   const { watch } = usePostWatcher((post) => {
     if (tab === 'myposts') return // already looking at it -- My Posts shows the change itself
+    setMyPostsRefresh((n) => n + 1) // My Posts' saved copy is out of date now
     setNotice(finishedMessage(post))
     setUnseen((n) => n + 1)
   }, session !== null)
@@ -61,7 +64,11 @@ function App() {
     return () => clearTimeout(timer)
   }, [notice])
 
-  if (loading) return <div className="loading-screen">Loading...</div>
+  useEffect(() => {
+    rememberTab(tab)
+  }, [tab])
+
+  if (loading) return <Splash />
   if (!session) return <AuthScreen />
 
   return (
@@ -91,6 +98,7 @@ function App() {
       <div className="app-content">
         {tab === 'feed' && (
           <FeedScreen
+            userId={session.user.id}
             sharedPostId={sharedPostId}
             onSharedHandled={() => {
               clearSharedPostId()
@@ -107,7 +115,7 @@ function App() {
             }}
           />
         )}
-        {tab === 'myposts' && <MyPostsScreen refreshSignal={myPostsRefresh} />}
+        {tab === 'myposts' && <MyPostsScreen userId={session.user.id} refreshSignal={myPostsRefresh} />}
         {tab === 'interests' && <InterestsScreen />}
       </div>
 
