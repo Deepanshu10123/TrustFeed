@@ -31,3 +31,12 @@ and [docs/HLD.md](docs/HLD.md#milestone-roadmap) for the full roadmap.
   too (see above).
 - `design/` — the approved visual design source (Claude Design mockup).
 - `docs/` — design docs, the decision log, and per-milestone write-ups
+
+## License
+
+Copyright (c) 2026 Deepanshu10123. Released under the
+[PolyForm Noncommercial License 1.0.0](LICENSE): you're welcome to read the
+code, learn from it, and use it for personal, educational, or other
+noncommercial purposes. You may **not** use it to build a commercial product
+or service without written permission — open an issue on this repository to
+ask. The third-party libraries and fonts used here keep their own licenses.
