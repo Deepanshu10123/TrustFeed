@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { getFeed, getSharedPost, likePost, retrying, unlikePost, type FeedPage } from '../lib/api'
+import { getFeed, getFeedUpdates, getSharedPost, likePost, retrying, unlikePost, type FeedPage } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
 import { useReadyReels } from '../hooks/useReadyReels'
 import type { Post } from '../lib/types'
 import { forgetSavedFeed, savedFeed, saveFeed, type FeedMode } from '../lib/feedCache'
+import { applyStats, withCommentCount } from '../lib/feedUpdates'
 import { sharePost } from '../lib/shareLink'
 import { bgStyleFor, preloadFor, timeAgo, uploaderHandle } from '../lib/format'
 import { CommentsSheet } from './CommentsSheet'
@@ -36,6 +37,13 @@ async function fetchFirstScreen(sharedPostId: string | null, following: boolean)
   const posts = shared ? [shared, ...page.posts.filter((p) => p.id !== shared.id)] : page.posts
   return { posts, nextCursor: page.next_cursor, sharedMissing: sharedPostId !== null && shared === null }
 }
+
+// How often an open feed asks the server what has changed -- new reels, likes,
+// comments. Also asked right away whenever you come back to the app. Nothing is asked
+// while the app is hidden, and never twice within MIN_CHECK_GAP_MS.
+const CHECK_EVERY_MS = 20_000
+const MIN_CHECK_GAP_MS = 5_000
+const MAX_CHECKED_POSTS = 60 // the server looks at no more than this many
 
 /** "For you" (everyone, filtered by your interests) or "Following" (only the
  * people you follow), floating over the top of the feed. */
@@ -122,6 +130,21 @@ export function FeedScreen({
     modeRef.current = mode
   })
 
+  // Keeping the feed up to date while it's open. `newCount` is how many reels have
+  // appeared since it was loaded (shown as a "N new reels" button -- they're not slotted
+  // in by themselves, because that would shift what's under your thumb).
+  const [newCount, setNewCount] = useState(0)
+  const postsRef = useRef(posts)
+  useEffect(() => {
+    postsRef.current = posts
+  })
+  const checkingRef = useRef(false)
+  const lastCheckAt = useRef(0)
+  const catchUpOnOpen = useRef(restored !== null) // a saved copy can be minutes old: catch up at once
+  // Bumped whenever the feed is replaced, so a page of older posts that was still on its
+  // way from before can't be tacked onto the new one.
+  const feedVersion = useRef(0)
+
   // Loads the first screen when the feed opens, and again each time you switch
   // between "For you" and "Following". `sharedPostId` is only ever the link the
   // app was opened with (cleared as soon as it's been used) and only applies
@@ -166,6 +189,16 @@ export function FeedScreen({
     if (restored && restored.activeIndex > 0) scrollToSlide(Math.min(restored.activeIndex, restored.posts.length))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Going to a slide that only exists after the next redraw (a reloaded feed, a post
+  // put on top): wait for that redraw, rather than guessing with a timer that can
+  // fire too early and leave you where you were.
+  const scrollAfterRender = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (scrollAfterRender.current === null) return
+    scrollToSlide(scrollAfterRender.current)
+    scrollAfterRender.current = null
+  })
+
   // Keep the saved copy in step with what's on screen (an empty feed isn't
   // worth going back to -- and it may just have had its last post reported).
   useEffect(() => {
@@ -209,6 +242,79 @@ export function FeedScreen({
     setTimeout(() => setToast(null), 2200)
   }
 
+  // Asks the server what has changed in this feed and applies it: fresh like and comment
+  // numbers go straight onto the reels, and new reels just raise the button. A failed
+  // check is ignored -- the next one tries again.
+  async function checkForUpdates() {
+    const current = postsRef.current
+    if (!current || current.length === 0 || checkingRef.current) return
+    if (document.visibilityState !== 'visible') return
+    if (Date.now() - lastCheckAt.current < MIN_CHECK_GAP_MS) return
+    checkingRef.current = true
+    lastCheckAt.current = Date.now()
+    const startedIn = modeRef.current
+    const version = feedVersion.current
+    try {
+      const newest = current.reduce((max, p) => (p.created_at > max ? p.created_at : max), current[0].created_at)
+      const ids = current.slice(0, MAX_CHECKED_POSTS).map((p) => p.id)
+      const updates = await getFeedUpdates(ids, newest, startedIn === 'following')
+      if (modeRef.current !== startedIn || feedVersion.current !== version) return // the feed was replaced meanwhile
+      setPosts((prev) => applyStats(prev, updates.posts, pendingLikes.current))
+      setNewCount(updates.new_count)
+    } catch {
+      // ignored on purpose (see above)
+    } finally {
+      checkingRef.current = false
+    }
+  }
+  const checkForUpdatesRef = useRef(checkForUpdates)
+  useEffect(() => {
+    checkForUpdatesRef.current = checkForUpdates
+  })
+
+  const loaded = posts !== null
+  useEffect(() => {
+    if (!loaded) return
+    const timer = setInterval(() => checkForUpdatesRef.current(), CHECK_EVERY_MS)
+    const backInView = () => {
+      if (document.visibilityState === 'visible') checkForUpdatesRef.current()
+    }
+    document.addEventListener('visibilitychange', backInView)
+    window.addEventListener('focus', backInView)
+    if (catchUpOnOpen.current) {
+      catchUpOnOpen.current = false
+      checkForUpdatesRef.current()
+    }
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', backInView)
+      window.removeEventListener('focus', backInView)
+    }
+  }, [loaded, mode])
+
+  // The "N new reels" button: load the feed again from the top and go there.
+  async function showNewReels() {
+    const waiting = newCount
+    const startedIn = mode
+    setNewCount(0)
+    try {
+      const first = await fetchFirstScreen(null, mode === 'following')
+      if (modeRef.current !== startedIn) return
+      feedVersion.current += 1
+      feedStartedAt.current = Date.now()
+      setPosts(first.posts)
+      setCursor(first.nextCursor)
+      setLoops(1)
+      lastGrownAt.current = 0
+      setActiveIndex(0)
+      setExpandedId(null)
+      scrollAfterRender.current = 0
+    } catch {
+      setNewCount(waiting)
+      showToast("Couldn't load the new reels")
+    }
+  }
+
   // The server keeps a post you've reported out of your feed from now on;
   // this just takes it off the screen straight away.
   function handleReported(postId: string) {
@@ -221,7 +327,7 @@ export function FeedScreen({
       setLoops(1)
       lastGrownAt.current = 0
       setActiveIndex(at)
-      setTimeout(() => scrollToSlide(at), 0)
+      scrollAfterRender.current = at
     }
     showToast("Thanks for reporting. It's off your feed now.")
   }
@@ -239,6 +345,8 @@ export function FeedScreen({
     setActiveIndex(0)
     setLoops(1)
     lastGrownAt.current = 0
+    setNewCount(0)
+    feedVersion.current += 1
     setExpandedId(null)
   }
 
@@ -248,6 +356,8 @@ export function FeedScreen({
     setError(null)
     setSlow(false)
     setStuck(false)
+    setNewCount(0)
+    feedVersion.current += 1
     setAttempt((n) => n + 1)
   }
 
@@ -268,7 +378,7 @@ export function FeedScreen({
       const post = await getSharedPost(postId)
       setPosts((prev) => [post, ...(prev ?? []).filter((p) => p.id !== post.id)])
       setActiveIndex(0)
-      setTimeout(() => scrollToSlide(0), 0)
+      scrollAfterRender.current = 0
     } catch {
       showToast("That post isn't available any more.")
     }
@@ -278,9 +388,10 @@ export function FeedScreen({
     if (!cursor || loadingMoreRef.current) return
     loadingMoreRef.current = true
     const startedIn = mode
+    const version = feedVersion.current
     try {
       const page = await fetchNonEmptyPage(cursor, mode === 'following')
-      if (modeRef.current !== startedIn) return // you switched feeds while this was loading
+      if (modeRef.current !== startedIn || feedVersion.current !== version) return // the feed was replaced while this was loading
       setPosts((prev) => {
         const seen = new Set((prev ?? []).map((p) => p.id))
         return [...(prev ?? []), ...page.posts.filter((p) => !seen.has(p.id))]
@@ -385,6 +496,14 @@ export function FeedScreen({
   return (
     <>
     {tabs}
+    {newCount > 0 && (
+      <button className="feed-new-pill" type="button" onClick={showNewReels}>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 19V5M6 11l6-6 6 6" />
+        </svg>
+        {newCount === 1 ? '1 new reel' : `${newCount} new reels`}
+      </button>
+    )}
     <div className="feed-scroll" ref={scrollRef}>
       {Array.from({ length: slideCount }, (_, index) => {
         // Slide `index` shows the posts in order, then round again from the top.
@@ -448,6 +567,7 @@ export function FeedScreen({
                 <span className="circle">
                   <CommentIcon />
                 </span>
+                <span className="count">{post.comment_count ?? 0}</span>
               </button>
               <button className="rail-btn" type="button" onClick={() => handleShare(post)}>
                 <span className="circle">
@@ -507,6 +627,7 @@ export function FeedScreen({
         post={commentsPost}
         currentUserId={session?.user.id}
         onClose={() => setCommentsPost(null)}
+        onCount={(count) => setPosts((prev) => withCommentCount(prev, commentsPost.id, count))}
         onOpenProfile={(userId) => {
           setCommentsPost(null)
           setProfileUserId(userId)

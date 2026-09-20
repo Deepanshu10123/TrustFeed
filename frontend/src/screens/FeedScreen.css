@@ -1,6 +1,9 @@
 .feed-scroll {
   height: 100%; overflow-y: auto;
   scroll-snap-type: y mandatory;
+  /* The feed says where to scroll itself. Left on, the browser quietly moves you when reels
+     are added or removed above the one you're on, which fights that. */
+  overflow-anchor: none;
   /* Still scrolls and snaps -- just without the visible bar down the side. */
   scrollbar-width: none; -ms-overflow-style: none;
 }
@@ -31,6 +34,14 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 .feed-tabs button.active { color: #fff; border-bottom-color: #fff; }
+/* "N new reels", just under the tabs. Tapping it loads the feed again from the top. */
+.feed-new-pill {
+  position: absolute; top: 62px; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 6px; padding: 9px 16px; border: none; border-radius: 999px;
+  background: var(--btn-bg); color: var(--btn-fg); cursor: pointer;
+  font: 700 13px/1 'Public Sans', sans-serif; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
 
 /* The card after the last post: loading more, a button if that failed, or
    the end of the feed. */

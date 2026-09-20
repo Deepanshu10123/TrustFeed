@@ -209,6 +209,22 @@ export async function getFeed(before?: string, following = false): Promise<FeedP
   return request(query ? `/feed?${query}` : '/feed')
 }
 
+export interface FeedUpdates {
+  /** Fresh like and comment numbers for each post that was asked about. */
+  posts: Record<string, { like_count: number; liked_by_me: boolean; comment_count: number }>
+  /** How many posts newer than `since` have appeared in the same feed. */
+  new_count: number
+}
+
+/** What has changed in the feed that's already on screen: one small request,
+ * instead of loading the whole feed again. `since` is the newest post's time. */
+export async function getFeedUpdates(ids: string[], since: string | null, following = false): Promise<FeedUpdates> {
+  const params = new URLSearchParams({ ids: ids.join(',') })
+  if (since) params.set('since', since)
+  if (following) params.set('following', 'true')
+  return request(`/feed/updates?${params}`)
+}
+
 export async function getUserProfile(userId: string): Promise<UserProfile> {
   return request(`/users/${userId}`)
 }

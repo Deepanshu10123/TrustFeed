@@ -80,6 +80,19 @@ def _like_info(post_ids: list[str], user_id: str) -> dict[str, dict]:
     return {row["post_id"]: row for row in rows}
 
 
+def _comment_counts(post_ids: list[str]) -> dict[str, int]:
+    """How many comments each of these posts has, in one query. Counted here from
+    the rows rather than by the database, so it needs no SQL to have been run
+    (PostgREST hands back at most 1,000 rows -- plenty for a page of posts)."""
+    if not post_ids:
+        return {}
+    rows = get_supabase_client().table("comments").select("post_id").in_("post_id", post_ids).execute().data
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["post_id"]] = counts.get(row["post_id"], 0) + 1
+    return counts
+
+
 def _like_state(post_id: str, user_id: str) -> dict:
     info = _like_info([post_id], user_id).get(post_id, {})
     return {"liked": info.get("liked_by_me", False), "like_count": info.get("like_count", 0)}
@@ -155,18 +168,20 @@ async def _decorate_posts(posts: list[dict], user_id: str) -> set[str]:
     post_ids = [p["id"] for p in posts]
     user_ids = list({p["user_id"] for p in posts})
 
-    like_info, profiles, reported, _ = await asyncio.gather(
+    like_info, profiles, reported, comment_counts, _ = await asyncio.gather(
         _optional("likes", {}, _like_info, post_ids, user_id),
         # Names and pictures are an add-on too: until the username SQL has
         # been run this lookup fails, and the feed should still load.
         _optional("profiles", {}, _profiles, user_ids),
         _optional("reports", set(), _reported_by, post_ids, user_id),
+        _optional("comments", {}, _comment_counts, post_ids),
         asyncio.to_thread(_attach_video_urls, posts),
     )
     for post in posts:
         info = like_info.get(post["id"], {})
         post["like_count"] = info.get("like_count", 0)
         post["liked_by_me"] = info.get("liked_by_me", False)
+        post["comment_count"] = comment_counts.get(post["id"], 0)
         profile = profiles.get(post["user_id"], {})
         post["uploader_avatar_url"] = profile.get("avatar_url")
         post["uploader_username"] = profile.get("username")
@@ -672,6 +687,74 @@ async def get_feed(before: str | None = None, following: bool = False, user=Depe
     # A post you've reported stays out of your feed, not just until you refresh.
     posts = [p for p in posts if p["id"] not in reported]
     return {"posts": posts, "next_cursor": next_cursor}
+
+
+MAX_UPDATE_IDS = 60  # a feed on screen is never longer than a few pages
+
+
+def _parse_post_ids(raw: str) -> list[str]:
+    """'id1,id2,...' from a query string -> real post ids (normalised the way the
+    database prints them, so the answers can be matched back), capped."""
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(str(uuid.UUID(part)))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ids must be post ids separated by commas")
+    return ids[:MAX_UPDATE_IDS]
+
+
+# Declared before "/feed/{post_id}" below: otherwise "updates" would be read as a post id.
+@app.get("/feed/updates")
+async def get_feed_updates(ids: str = "", since: str | None = None, following: bool = False, user=Depends(get_current_user)):
+    """What has changed in a feed the app already has on screen, so it can stay
+    up to date without reloading the whole thing: the current likes and comments
+    of the posts listed in `ids`, and how many new posts have appeared since
+    `since` (the newest post the app has) in the same feed -- your interests, or
+    the people you follow. One small request instead of a whole page of posts."""
+    post_ids = _parse_post_ids(ids)
+    if since is not None:
+        try:
+            datetime.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="since must be a timestamp taken from a post")
+
+    def count_new_posts() -> int:
+        if since is None:
+            return 0
+        supabase = get_supabase_client()
+        query = supabase.table("posts").select("id", count="exact", head=True).eq("status", "published").gt("created_at", since)
+        if following:
+            rows = supabase.table("follows").select("followee_id").eq("follower_id", user.id).limit(MAX_FOLLOWING).execute().data
+            followee_ids = [row["followee_id"] for row in rows]
+            if not followee_ids:
+                return 0
+            query = query.in_("user_id", followee_ids)
+        else:
+            topics = _topics_for(user.id)
+            if topics:
+                query = query.in_("declared_topic", topics)
+        return query.execute().count or 0
+
+    like_info, comment_counts, new_count = await asyncio.gather(
+        _optional("likes", {}, _like_info, post_ids, user.id),
+        _optional("comments", {}, _comment_counts, post_ids),
+        _optional("new posts", 0, count_new_posts),
+    )
+    return {
+        "posts": {
+            post_id: {
+                "like_count": like_info.get(post_id, {}).get("like_count", 0),
+                "liked_by_me": like_info.get(post_id, {}).get("liked_by_me", False),
+                "comment_count": comment_counts.get(post_id, 0),
+            }
+            for post_id in post_ids
+        },
+        "new_count": new_count,
+    }
 
 
 @app.get("/feed/{post_id}")
