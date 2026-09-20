@@ -1,7 +1,7 @@
 import React from 'react';
 import {easeInOut, ramp} from '../lib/anim';
 import {Reel} from './Reel';
-import {AppScreen, Header, TabBar, Tap, useSceneFrame} from './parts';
+import {AppScreen, Header, SceneSfx, TabBar, Tap, useSceneFrame} from './parts';
 
 const TOPICS = ['space', 'science', 'history', 'nutrition', 'technology', 'wildlife', 'sports', 'politics', 'finance', 'health', 'psychology', 'culture'];
 // The frame each topic gets ticked.
@@ -61,6 +61,9 @@ export const PersonalizeScreen: React.FC = () => {
     <AppScreen>
       {onFeed ? <Reel variant="octopus" liked={liked} likes={liked ? 25 : 24} /> : <Interests f={f} />}
       {onFeed && <Tap x={318} y={502} at={136} />}
+      {/* these live here, not in Interests, because Interests is removed from the screen before their tails finish */}
+      <SceneSfx name="ding" at={SAVE_TAP + 8} />
+      <SceneSfx name="pop" at={140} />
     </AppScreen>
   );
 };

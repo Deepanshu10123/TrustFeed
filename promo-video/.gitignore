@@ -1,3 +1,5 @@
 node_modules/
 out/
 .remotion/
+# made by scripts/make-audio.mjs (about 10 MB) -- `npm run audio` recreates it
+public/audio/

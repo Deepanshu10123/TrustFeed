@@ -4,8 +4,12 @@
   "private": true,
   "description": "The LinkedIn marketing video for TrustFeed, built with Remotion (React -> MP4).",
   "scripts": {
+    "audio": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/make-audio.mjs",
+    "prestart": "npm run audio",
     "start": "remotion studio",
-    "render": "remotion render TrustFeedPromo out/trustfeed-promo.mp4 --crf=18",
+    "prerender": "npm run audio",
+    "render": "remotion render TrustFeedPromo out/trustfeed-raw.mp4 --crf=18",
+    "postrender": "node scripts/master-audio.mjs",
     "still": "remotion still TrustFeedPromo",
     "typecheck": "tsc --noEmit"
   },

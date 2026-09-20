@@ -10,3 +10,4 @@ python-multipart>=0.0.9
 supabase>=2.4.0
 mcp>=1.0.0
 sentry-sdk[fastapi]>=2.0.0
+imageio-ffmpeg>=0.5.1  # a real ffmpeg inside a pip install -- used to make uploaded videos quick to play

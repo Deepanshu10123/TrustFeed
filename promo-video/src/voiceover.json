@@ -1,0 +1,119 @@
+{
+  "voice": "en-US-AndrewNeural",
+  "lines": [
+    {
+      "id": "hook1",
+      "at": 0.4,
+      "rate": "-8%",
+      "text": "Is what you're scrolling actually true?",
+      "duration": 1.82,
+      "gain": 1
+    },
+    {
+      "id": "hook2",
+      "at": 2.85,
+      "rate": "-10%",
+      "text": "Most feeds never check.",
+      "duration": 1.44,
+      "gain": 0.956
+    },
+    {
+      "id": "brand",
+      "at": 4.4,
+      "text": "Meet TrustFeed. The feed that shows its work.",
+      "duration": 2.72,
+      "gain": 1
+    },
+    {
+      "id": "post",
+      "at": 7.5,
+      "text": "Upload a video or a written claim, and choose its topic.",
+      "duration": 3.32,
+      "gain": 0.966
+    },
+    {
+      "id": "check",
+      "at": 12.3,
+      "text": "Before anyone sees it, AI agents watch the video, pull out the claims, and search the web for evidence.",
+      "duration": 6.44,
+      "gain": 1
+    },
+    {
+      "id": "prove1",
+      "at": 19.4,
+      "text": "Every verdict shows its work.",
+      "duration": 1.64,
+      "gain": 1
+    },
+    {
+      "id": "prove2",
+      "at": 21.5,
+      "text": "Tap the badge to see the score, and the real sources behind it.",
+      "duration": 3.62,
+      "gain": 1
+    },
+    {
+      "id": "protect1",
+      "at": 26.4,
+      "text": "Claims that don't hold up are rejected, with the reason.",
+      "duration": 3.1,
+      "gain": 1
+    },
+    {
+      "id": "protect2",
+      "at": 29.65,
+      "text": "Borderline posts wait for a human.",
+      "duration": 2.1,
+      "gain": 1
+    },
+    {
+      "id": "personalize1",
+      "at": 32.5,
+      "text": "Choose the topics you care about,",
+      "duration": 1.56,
+      "gain": 1
+    },
+    {
+      "id": "personalize2",
+      "at": 35.4,
+      "text": "then like, comment, and share a link.",
+      "duration": 2.32,
+      "gain": 0.996
+    },
+    {
+      "id": "community1",
+      "at": 38.2,
+      "text": "Follow people you trust.",
+      "duration": 1.18,
+      "gain": 0.991
+    },
+    {
+      "id": "community2",
+      "at": 40.6,
+      "text": "If something slips through, report it.",
+      "duration": 1.92,
+      "gain": 1
+    },
+    {
+      "id": "community3",
+      "at": 42.75,
+      "text": "Enough reports hide it for everyone.",
+      "duration": 1.94,
+      "gain": 1
+    },
+    {
+      "id": "hood",
+      "at": 44.95,
+      "text": "Under the hood, two scores decide: is it on topic, and do its claims hold up?",
+      "duration": 4.72,
+      "gain": 1
+    },
+    {
+      "id": "cta",
+      "at": 51,
+      "text": "Try TrustFeed, and tell me what you think.",
+      "duration": 2.18,
+      "gain": 0.922
+    }
+  ]
+}

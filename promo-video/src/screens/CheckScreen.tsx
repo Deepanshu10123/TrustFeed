@@ -4,7 +4,7 @@ import {MOON} from '../content';
 import {ramp} from '../lib/anim';
 import {MyPostsBase, OLDER_TILES, type Tile} from './MyPostsBase';
 import {PostDetailMock} from './Sheets';
-import {AppScreen, Tap, useSceneFrame} from './parts';
+import {AppScreen, SceneSfx, Tap, useSceneFrame} from './parts';
 
 // The live progress lines, word for word what the app's worker sends.
 const preview = (claim: string): string => (claim.length <= 70 ? claim : claim.slice(0, 67) + '...');
@@ -48,6 +48,12 @@ export const CheckScreen: React.FC = () => {
         />
       </MyPostsBase>
       <Tap x={72} y={315} at={2} />
+      <SceneSfx name="swish" at={8} />
+      {/* a small pip each time the agents report a new step, and a bell when the post is published */}
+      {CHECK_MESSAGES.map((m) => (
+        <SceneSfx key={m.at} name="blip" at={m.at} volume={0.55} />
+      ))}
+      <SceneSfx name="ding" at={CHECK_DONE} />
     </AppScreen>
   );
 };

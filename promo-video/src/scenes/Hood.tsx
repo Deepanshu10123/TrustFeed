@@ -1,5 +1,6 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
+import {Sfx} from '../components/Sfx';
 import {Words} from '../components/Words';
 import {TECH} from '../content';
 import {useExit, usePop, useReveal} from '../lib/anim';
@@ -73,6 +74,14 @@ export const Hood: React.FC = () => {
           </span>
         ))}
       </div>
+      {/* a pip as each step drops in, three light ticks for the three rules, and a pop for the tech chips */}
+      {[14, 36, 62, 112].map((at) => (
+        <Sfx key={at} name="blip" at={at + 2} volume={0.6} />
+      ))}
+      {[84, 92, 100].map((at) => (
+        <Sfx key={at} name="tick" at={at + 2} />
+      ))}
+      <Sfx name="pop" at={130} volume={0.6} />
     </AbsoluteFill>
   );
 };

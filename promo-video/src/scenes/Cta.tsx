@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
 import {LogoMark, Wordmark} from '../components/Brand';
+import {Sfx} from '../components/Sfx';
 import {SITE} from '../content';
 import {usePop, useReveal} from '../lib/anim';
 
@@ -42,6 +43,9 @@ export const Cta: React.FC = () => {
           Try it and tell me what you think.
         </div>
       </div>
+      {/* the same chime as the logo, as the check mark closes the loop, then a pop for the link */}
+      <Sfx name="chime" at={34} />
+      <Sfx name="pop" at={42} />
     </AbsoluteFill>
   );
 };

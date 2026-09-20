@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
 import {LogoMark, Wordmark} from '../components/Brand';
+import {Sfx, type SfxName} from '../components/Sfx';
 import {BADGE_CLASS, SITE, type VerdictLabel} from '../content';
 import {usePop, useExit, useReveal} from '../lib/anim';
 
@@ -35,6 +36,11 @@ export const Logo: React.FC = () => {
           ))}
         </div>
       </div>
+      {/* a chime as the check mark finishes drawing, then four rising pops for the verdicts */}
+      <Sfx name="chime" at={34} volume={0.5} />
+      {LABELS.map((label, i) => (
+        <Sfx key={label} name={`pop${i + 1}` as SfxName} at={74 + i * 7} />
+      ))}
     </AbsoluteFill>
   );
 };

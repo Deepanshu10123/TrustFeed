@@ -2,7 +2,7 @@ import React from 'react';
 import {ramp} from '../lib/anim';
 import {MyPostsBase, OLDER_TILES, type Tile} from './MyPostsBase';
 import {PostDetailMock, REJECTED_BODY, REJECTED_PREVIEW, REVIEW_BODY, REVIEW_PREVIEW} from './Sheets';
-import {AppScreen, Tap, useSceneFrame} from './parts';
+import {AppScreen, SceneSfx, Tap, useSceneFrame} from './parts';
 
 const SWAP = 92;
 
@@ -31,6 +31,9 @@ export const ProtectScreen: React.FC = () => {
         />
       </MyPostsBase>
       <Tap x={72} y={315} at={2} />
+      <SceneSfx name="swish" at={8} />
+      <SceneSfx name="reject" at={20} />
+      <SceneSfx name="blip" at={SWAP + 2} />
     </AppScreen>
   );
 };

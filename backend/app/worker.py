@@ -30,11 +30,35 @@ from app.agents.models import Verdict
 from app.agents.pipeline import run_verification, run_verification_from_video
 from app.agents.relevance import score_relevance
 from app.core.config import get_gemini_api_key
+from app.core.keep_awake import start_keep_awake
 from app.core.monitoring import init_error_tracking, report_error
+from app.core.video_optimize import speed_up_video
 from app.db.supabase_client import VIDEO_BUCKET, get_supabase_client
 from app.jobs.models import Job
 from app.jobs.progress import END_OF_STREAM, publish_progress
 from app.jobs.queue import listen
+
+
+def _make_video_quick_to_play(storage_path: str, local_path: str, on_progress: Callable[[str], None]) -> str | None:
+    """Swaps the uploaded video in storage for a small, quick-to-play copy (see
+    core/video_optimize.py) and returns that copy's local path -- it's smaller, so
+    it's also the better file to analyse. None means the video was left as it was.
+
+    This must never fail a post: someone's video being slow to load is a shame, but
+    their post not being checked at all is worse. So any problem is reported and the
+    original carries on."""
+
+    def store(new_path: str) -> None:
+        get_supabase_client().storage.from_(VIDEO_BUCKET).upload(
+            storage_path, new_path, {"content-type": "video/mp4", "upsert": "true"}
+        )
+
+    try:
+        return speed_up_video(local_path, store, on_progress)
+    except Exception as e:
+        print(f"[worker] couldn't make the video quick to play, keeping the original: {e}", flush=True)
+        report_error(e)
+        return None
 
 
 def _process(
@@ -52,10 +76,19 @@ def _process(
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
             tmp.write(video_bytes)
             tmp_path = tmp.name
+        del video_bytes  # a big upload shouldn't stay in memory while it is converted
+        temp_files = [tmp_path]
         try:
-            understanding, report = run_verification_from_video(client, tmp_path, on_progress)
+            # Whatever the phone recorded (often huge, sometimes HEVC, index at the
+            # end) is what every viewer would otherwise have to download. Fix it once, here.
+            quick_path = _make_video_quick_to_play(job.content, tmp_path, on_progress)
+            if quick_path:
+                temp_files.append(quick_path)
+            understanding, report = run_verification_from_video(client, quick_path or tmp_path, on_progress)
         finally:
-            os.unlink(tmp_path)
+            for path in temp_files:
+                if os.path.exists(path):
+                    os.unlink(path)
         result = {"understanding": understanding.model_dump(), "report": report.model_dump()}
         return result, report.verdicts, understanding.transcript
     else:
@@ -88,6 +121,9 @@ def run_worker() -> None:
     # this a long-running service's logs would only appear in bursts
     # instead of as things actually happen.
     print("[worker] Verification Service started, waiting for jobs...", flush=True)
+    # This service never sleeps, so it keeps the free API from sleeping (see keep_awake.py).
+    if start_keep_awake():
+        print("[worker] keeping the API awake by visiting it every few minutes", flush=True)
 
     while True:
         try:

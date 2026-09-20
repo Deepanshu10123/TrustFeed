@@ -6,7 +6,8 @@ nothing here is deployed.
 
     npm install
     npm start          # opens the preview editor (scrub the timeline, change text live)
-    npm run render     # writes out/trustfeed-promo.mp4  (1080x1350, 30 fps, no sound)
+    npm run render     # writes out/trustfeed-promo.mp4  (1080x1350, 30 fps, with sound)
+    npm run audio      # remakes the music and sounds (start/render already do this first)
 
 ## Where things are
 
@@ -34,8 +35,32 @@ Hook -> logo + the four verdicts -> 01 Post -> 02 Check -> 03 Prove ->
 - **Nothing may animate by itself.** Remotion draws every frame separately, so
   motion is driven by the frame number (CSS animations/transitions are switched
   off inside the phone).
-- **No sound.** LinkedIn autoplays muted, so the story is carried by the
-  captions. To add music, drop an mp3 in `public/` and add an `<Audio>` to
-  `src/Promo.tsx`.
+- **Sound is made from scratch.** `scripts/make-audio.mjs` synthesises an
+  ambient music bed (uneasy in the hook, resolving at the logo, lifting for the
+  end card) and the small interface sounds (taps, sheets, the "checked" bell...).
+  Nothing is sampled or downloaded, so there is nothing to license. The files go
+  to `public/audio/` and are not committed -- `npm run audio` recreates them
+  identically. The music's chord changes follow `src/timeline.ts`; each small
+  sound is placed next to the on-screen event it belongs to (`<Sfx>`, and every
+  `<Tap>` plays its own tick). The story still works with the sound off, since
+  LinkedIn autoplays muted and the captions carry it.
+- To use your own music instead, drop a file in `public/` and swap the
+  `<Audio>` in `src/Promo.tsx`.
+- **Voice-over.** `src/voiceover.json` lists every narrated line, when it starts
+  and which voice says it. The clips are in `public/voice/*.mp3` and ARE
+  committed, so rendering never needs Python or the internet. To change the
+  words or the voice: edit the JSON, then
+
+      pip install edge-tts
+      python scripts/make-voiceover.py        # makes the clips (needs internet)
+      node scripts/measure-voiceover.mjs      # measures them, evens out loudness,
+                                              # warns if a line runs into the next
+
+  and render again. (The speech comes from the free service behind Microsoft
+  Edge's "Read aloud", through the `edge-tts` package -- not an official
+  key-based Azure Speech setup. `python -m edge_tts --list-voices` lists voices.)
+  The music dips while the voice is speaking (`musicLevel` in
+  `src/components/VoiceOver.tsx`). To use your own voice, record each line, save
+  it as `public/voice/<id>.mp3`, and run the measure step.
 - `scripts/stills.mjs 60 340 ...` renders single frames to `out/stills/`, handy
   for checking a layout without rendering the whole video.

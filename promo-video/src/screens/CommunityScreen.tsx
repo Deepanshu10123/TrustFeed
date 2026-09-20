@@ -2,7 +2,7 @@ import React from 'react';
 import {ramp} from '../lib/anim';
 import {Reel} from './Reel';
 import {ProfileSheetMock, ReportSheetMock} from './Sheets';
-import {AppScreen, Tap, useSceneFrame} from './parts';
+import {AppScreen, SceneSfx, Tap, useSceneFrame} from './parts';
 
 /** Scene 06: open a profile and follow, then report a post. */
 export const CommunityScreen: React.FC = () => {
@@ -25,6 +25,10 @@ export const CommunityScreen: React.FC = () => {
       <Tap x={326} y={33} at={98} />
       <Tap x={180} y={380} at={124} />
       <Tap x={180} y={745} at={140} />
+      <SceneSfx name="swish" at={16} />
+      <SceneSfx name="pop" at={56} />
+      <SceneSfx name="swish" at={102} />
+      <SceneSfx name="pop" at={154} />
     </AppScreen>
   );
 };

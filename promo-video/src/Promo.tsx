@@ -1,7 +1,8 @@
 import React from 'react';
-import {AbsoluteFill, Sequence} from 'remotion';
+import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import './promo.css';
 import {Backdrop} from './components/Backdrop';
+import {VoiceOver, musicLevel} from './components/VoiceOver';
 import {Cta} from './scenes/Cta';
 import {Demo} from './scenes/Demo';
 import {Hood} from './scenes/Hood';
@@ -12,6 +13,11 @@ import {T} from './timeline';
 /** The whole video, start to finish. See timeline.ts for how long each part runs. */
 export const Promo: React.FC = () => (
   <AbsoluteFill className="promo-root">
+    {/* The music bed, made by scripts/make-audio.mjs. It turns the corner with the
+        picture: uneasy in the hook, resolving at the logo, lifting for the end -- and
+        it dips whenever the narration is speaking. */}
+    <Audio src={staticFile('audio/music.wav')} volume={(frame) => 0.8 * musicLevel(frame)} />
+    <VoiceOver />
     <Backdrop />
     <Sequence from={T.hook.from} durationInFrames={T.hook.dur} name="Hook">
       <Hook />

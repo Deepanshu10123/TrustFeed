@@ -2,6 +2,7 @@ import React from 'react';
 import {AbsoluteFill, Sequence, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Caption} from '../components/Caption';
 import {Phone, cameraAt, type CameraKey} from '../components/Phone';
+import {Sfx} from '../components/Sfx';
 import {ramp} from '../lib/anim';
 import {CheckScreen, Steps} from '../screens/CheckScreen';
 import {CommunityScreen} from '../screens/CommunityScreen';
@@ -51,7 +52,7 @@ const CAPTIONS: Record<SceneId, {eyebrow: string; headline: string; sub?: React.
 const CAMERA: Record<SceneId, [number, number, number][]> = {
   post: [[0, 2.05, 0], [56, 2.05, 0], [82, 2.05, 125]],
   check: [[0, 2.05, 125], [24, 2.05, 345]],
-  prove: [[0, 2.05, 330], [36, 2.05, 330], [62, 1.8, 255]],
+  prove: [[0, 2.05, 330], [70, 2.05, 330], [96, 1.8, 255]],
   protect: [[0, 2.05, 345]],
   personalize: [[0, 2.05, 60], [62, 2.05, 60], [92, 2.05, 330]],
   community: [[0, 2.05, 330], [14, 2.05, 330], [34, 1.9, 40], [78, 1.9, 40], [96, 2.05, 0], [100, 2.05, 0], [124, 1.7, 250]],
@@ -74,6 +75,9 @@ export const Demo: React.FC = () => {
 
   return (
     <AbsoluteFill>
+      {/* the phone sliding in, and later sliding away */}
+      <Sfx name="whoosh" at={0} volume={0.45} />
+      <Sfx name="whoosh" at={DEMO_DUR - 26} volume={0.45} />
       {DEMO_SCENES.map(({id}) => (
         <Sequence key={id} from={SC[id].start} durationInFrames={SC[id].dur} layout="none">
           <Caption {...CAPTIONS[id]} />

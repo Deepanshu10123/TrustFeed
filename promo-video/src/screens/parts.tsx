@@ -1,5 +1,6 @@
 import React from 'react';
 import {Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Sfx, type SfxName} from '../components/Sfx';
 import {BADGE_CLASS, type VerdictLabel} from '../content';
 import {linear, ramp} from '../lib/anim';
 
@@ -94,28 +95,38 @@ export const TabBar: React.FC<{active: 'feed' | 'upload' | 'myposts' | null}> = 
   </div>
 );
 
-/** A finger tap: a ring that grows and fades where (x, y) is on the phone screen. */
+/** A sound placed on a phone screen; `at` counts from the scene's first beat, like the taps do. */
+export const SceneSfx: React.FC<{name: SfxName; at: number; volume?: number}> = ({name, at, volume}) => (
+  <Sfx name={name} at={at + OV} volume={volume} />
+);
+
+/** A finger tap (with its little "tick" sound): a ring that grows and fades where
+ * (x, y) is on the phone screen. */
 export const Tap: React.FC<{x: number; y: number; at: number}> = ({x, y, at}) => {
   const f = useSceneFrame();
   const t = (f - at) / 16;
-  if (t < 0 || t > 1) return null;
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x - 24,
-        top: y - 24,
-        width: 48,
-        height: 48,
-        borderRadius: '50%',
-        background: 'rgba(255,255,255,0.26)',
-        border: '2px solid rgba(255,255,255,0.85)',
-        transform: `scale(${0.5 + t * 0.8})`,
-        opacity: 1 - t * t,
-        zIndex: 200,
-        pointerEvents: 'none',
-      }}
-    />
+    <>
+      <SceneSfx name="tap" at={at} />
+      {t >= 0 && t <= 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            left: x - 24,
+            top: y - 24,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.26)',
+            border: '2px solid rgba(255,255,255,0.85)',
+            transform: `scale(${0.5 + t * 0.8})`,
+            opacity: 1 - t * t,
+            zIndex: 200,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+    </>
   );
 };
 

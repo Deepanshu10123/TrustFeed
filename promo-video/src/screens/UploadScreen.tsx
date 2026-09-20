@@ -1,7 +1,7 @@
 import React from 'react';
 import {MOON} from '../content';
 import {easeInOut, ramp} from '../lib/anim';
-import {AppScreen, Header, TabBar, Tap, useSceneFrame} from './parts';
+import {AppScreen, Header, SceneSfx, TabBar, Tap, useSceneFrame} from './parts';
 
 /** Scene 01: pick Video, choose a file, choose a topic, submit. */
 export const UploadScreen: React.FC = () => {
@@ -82,6 +82,7 @@ export const UploadScreen: React.FC = () => {
       <Tap x={180} y={253} at={52} />
       <Tap x={180} y={384} at={76} />
       <Tap x={180} y={500} at={102} />
+      <SceneSfx name="ding" at={146} />
     </AppScreen>
   );
 };

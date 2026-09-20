@@ -6,9 +6,11 @@ name: Keep API awake
 #
 # It's a nudge, not a guarantee: GitHub is allowed to run scheduled jobs late,
 # and switches them off in a public repo after 60 days without any commits.
-# In practice it's far too unreliable to depend on -- on its first day it ran once
-# in almost five hours instead of every five minutes -- so also point a real
-# uptime monitor (UptimeRobot, cron-job.org...) at /health every 5 minutes.
+# In practice it's far too unreliable to depend on -- measured over 11 hours it
+# ran 6 times instead of about 137, so the API slept between nearly every run.
+# The reliable keep-awake is now the Verification Service itself, which never
+# sleeps and visits /health every 4 minutes (backend/app/core/keep_awake.py);
+# this job is just a second, weaker nudge on top.
 # A failed visit only leaves a warning on the run (rather than failing it), so
 # an outage doesn't send you an email every 5 minutes.
 on:
