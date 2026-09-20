@@ -91,6 +91,11 @@ export function FeedScreen({
   // Which slide is on screen, so only the videos next to it are loaded --
   // without this the feed starts fetching all 50 at once.
   const [activeIndex, setActiveIndex] = useState(restored ? Math.min(restored.activeIndex, restored.posts.length) : 0)
+  // How many times the posts have been laid end to end. Once there is nothing older
+  // left to load, the feed doesn't stop: it goes round again, so there is always
+  // another reel to swipe to (like every other short-video app).
+  const [loops, setLoops] = useState(1)
+  const lastGrownAt = useRef(0) // the slide count a round was last added at, so one scroll adds only one
   const scrollRef = useRef<HTMLDivElement>(null)
   // The first load after the server has been asleep can take up to a minute;
   // after a few seconds the placeholder says so instead of just sitting there.
@@ -103,6 +108,10 @@ export function FeedScreen({
 
   // Where the next page starts (null once there's nothing older).
   const [cursor, setCursor] = useState<string | null>(restored?.cursor ?? null)
+  const cursorRef = useRef(cursor)
+  useEffect(() => {
+    cursorRef.current = cursor
+  })
   const [loadFailed, setLoadFailed] = useState(false)
   const loadingMoreRef = useRef(false)
   const loadMoreRef = useRef<() => void>(() => {})
@@ -162,10 +171,12 @@ export function FeedScreen({
   useEffect(() => {
     if (posts === null) return
     if (posts.length === 0) forgetSavedFeed()
-    else saveFeed(userId, { startedAt: feedStartedAt.current, mode, posts, cursor, activeIndex })
+    // Saved as a place in the posts themselves, not in the repeated rounds below.
+    else saveFeed(userId, { startedAt: feedStartedAt.current, mode, posts, cursor, activeIndex: activeIndex % posts.length })
   }, [userId, mode, posts, cursor, activeIndex])
 
   const postCount = posts?.length ?? 0
+  const slideCount = postCount * loops
   useEffect(() => {
     const root = scrollRef.current
     if (!root) return
@@ -175,17 +186,23 @@ export function FeedScreen({
           if (!entry.isIntersecting) continue
           const index = Number((entry.target as HTMLElement).dataset.index)
           setActiveIndex(index)
-          // Getting close to the last post: fetch the next page now, so it's
-          // ready before you reach the end. (It does nothing if there's no
-          // next page or one is already on its way.)
-          if (index >= postCount - 3) loadMoreRef.current()
+          // Getting close to the last slide: make sure there's more ahead, so it's
+          // there before you reach the end.
+          if (index >= slideCount - 3) {
+            if (cursorRef.current) {
+              loadMoreRef.current() // an older page to fetch (does nothing if one is already on its way)
+            } else if (postCount > 0 && lastGrownAt.current !== slideCount) {
+              lastGrownAt.current = slideCount // nothing older left: go round again
+              setLoops((n) => n + 1)
+            }
+          }
         }
       },
       { root, threshold: 0.6 },
     )
     root.querySelectorAll('.feed-slide').forEach((slide) => observer.observe(slide))
     return () => observer.disconnect()
-  }, [postCount])
+  }, [slideCount, postCount])
 
   function showToast(message: string) {
     setToast(message)
@@ -196,7 +213,16 @@ export function FeedScreen({
   // this just takes it off the screen straight away.
   function handleReported(postId: string) {
     setReportingPost(null)
+    const at = posts?.findIndex((p) => p.id === postId) ?? -1
     setPosts((prev) => prev?.filter((p) => p.id !== postId) ?? prev)
+    if (loops > 1 && at >= 0) {
+      // The rounds were laid out for the old list, so start over at the post that
+      // followed the reported one -- otherwise you'd land on something random.
+      setLoops(1)
+      lastGrownAt.current = 0
+      setActiveIndex(at)
+      setTimeout(() => scrollToSlide(at), 0)
+    }
     showToast("Thanks for reporting. It's off your feed now.")
   }
 
@@ -211,6 +237,8 @@ export function FeedScreen({
     setStuck(false)
     setLoadFailed(false)
     setActiveIndex(0)
+    setLoops(1)
+    lastGrownAt.current = 0
     setExpandedId(null)
   }
 
@@ -351,21 +379,24 @@ export function FeedScreen({
   // The next reel only starts loading in full once the one you're on can play
   // through (or has no video to load), so the two don't compete for a slow
   // connection and the one you're actually watching arrives first.
-  const activePost = posts[activeIndex]
+  const activePost = activeIndex < slideCount ? posts[activeIndex % postCount] : undefined
   const activeSettled = !activePost || activePost.kind !== 'video' || !activePost.video_url || isReady(activePost.id)
 
   return (
     <>
     {tabs}
     <div className="feed-scroll" ref={scrollRef}>
-      {posts.map((post, index) => {
+      {Array.from({ length: slideCount }, (_, index) => {
+        // Slide `index` shows the posts in order, then round again from the top.
+        const post = posts[index % postCount]
+        const round = Math.floor(index / postCount)
         const expanded = expandedId === post.id
         const paused = pausedIds.has(post.id)
         const liked = post.liked_by_me ?? false
         const isMine = post.user_id === session?.user.id
         return (
           <div
-            key={post.id}
+            key={`${round}:${post.id}`}
             data-index={index}
             className={`feed-slide${expanded ? ' expanded' : ''}`}
             style={bgStyleFor(post.id)}
@@ -450,27 +481,26 @@ export function FeedScreen({
           </div>
         )
       })}
-      <div className="feed-slide feed-end" data-index={posts.length}>
-        {!cursor ? (
-          <>
-            <p className="feed-end-title">You're all caught up</p>
-            <p className="feed-end-sub">New posts show up here first.</p>
-          </>
-        ) : loadFailed ? (
-          <button
-            className="feed-end-btn"
-            type="button"
-            onClick={() => {
-              setLoadFailed(false)
-              loadMore()
-            }}
-          >
-            Load more
-          </button>
-        ) : (
-          <p className="feed-end-title">Loading more...</p>
-        )}
-      </div>
+      {/* Only while older posts are still on their way. Once there are none, the feed
+          just goes round again instead of ending on a dead-end card. */}
+      {cursor && (
+        <div className="feed-slide feed-end" data-index={slideCount}>
+          {loadFailed ? (
+            <button
+              className="feed-end-btn"
+              type="button"
+              onClick={() => {
+                setLoadFailed(false)
+                loadMore()
+              }}
+            >
+              Load more
+            </button>
+          ) : (
+            <p className="feed-end-title">Loading more...</p>
+          )}
+        </div>
+      )}
     </div>
     {commentsPost && (
       <CommentsSheet
