@@ -2,10 +2,23 @@
 # Service (ADR 0003) as two independent services from one repo.
 # In Render: New + -> Blueprint -> select this repo -> it reads this file.
 #
+# Both services run in Render's SINGAPORE region -- the closest one to India (Render
+# has no Indian region), and next to the Supabase database's neighbourhood instead of
+# across the Pacific from it (they used to be in Oregon). Render can't move an
+# existing service to another region, so these are NEW services with a "-sg" name;
+# the old Oregon ones were left running, no longer managed by this file, until the
+# switch was proven, and then deleted by hand. (Careful: if a service is deleted by
+# hand while it is still listed here, the next sync quietly recreates it.)
+#
 # Neither service defines secrets inline (sync: false means "set this in
 # the Render dashboard yourself") -- copy the values from your local
-# backend/.env. Both services need the same env vars since either one
-# can end up needing to talk to Gemini, Tavily, Redis, or Supabase.
+# backend/.env, or from the same service's Environment tab. Both services need
+# the same env vars since either one can end up needing to talk to Gemini,
+# Tavily, Redis, or Supabase.
+#
+# Also set in the dashboard, not here: PYTHON_VERSION if the services need a
+# specific Python (the code needs 3.13 or newer), and any of the optional tuning
+# settings in backend/.env.example.
 #
 # Note: verify service/runtime field names against Render's current
 # Blueprint docs when you import this -- Render occasionally renames
@@ -14,8 +27,9 @@
 
 services:
   - type: web
-    name: trustfeed-api
+    name: trustfeed-api-sg
     env: python
+    region: singapore
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -35,10 +49,13 @@ services:
         sync: false
       - key: FRONTEND_ORIGIN
         sync: false
+      - key: SENTRY_DSN
+        sync: false
 
   - type: worker
-    name: trustfeed-verification-service
+    name: trustfeed-verification-service-sg
     env: python
+    region: singapore
     plan: starter
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -56,3 +73,11 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: SENTRY_DSN
+        sync: false
+      # This worker never sleeps, so it keeps the free API awake (app/core/keep_awake.py)
+      # by visiting this address every few minutes. It must be the API's real address --
+      # if Render gave the API a different one (it adds letters when a name is taken),
+      # change this value in the dashboard to match.
+      - key: KEEP_AWAKE_URL
+        value: https://trustfeed-api-sg.onrender.com/health
